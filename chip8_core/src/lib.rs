@@ -237,9 +237,12 @@ impl Emulator {
 			}
 			// 8XY6: V[x] = V[x] >> 1
 			(0x8, _, _, 6) => {
-				let index = digit2 as usize;
-				let lsb = self.v_register[index] & 1;
-				self.v_register[index] >>= 1;
+				let index1 = digit2 as usize;
+				let index2 = digit3 as usize;
+				// TODO: QUIRK OPTION
+				self.v_register[index1] = self.v_register[index2];
+				let lsb = self.v_register[index1] & 1;
+				self.v_register[index1] >>= 1;
 				self.v_register[0xF] = lsb;
 			}
 			// 8XY7: V[x] = V[y] - V[x]
@@ -257,9 +260,11 @@ impl Emulator {
 			}
 			// 8XYE: V[x] = V[x] << 1
 			(0x8, _, _, 0xE) => {
-				let index = digit2 as usize;
-				let msb = (self.v_register[index] >> 7) & 1;
-				self.v_register[index] <<= 1;
+				let index1 = digit2 as usize;
+				let index2 = digit3 as usize;
+				self.v_register[index1] = self.v_register[index2];
+				let msb = (self.v_register[index1] >> 7) & 1;
+				self.v_register[index1] <<= 1;
 				self.v_register[0xF] = msb;
 			}			
 			// 9XY0: Skip if V[x] != V[y]
@@ -398,6 +403,7 @@ impl Emulator {
 					let ram_index = (self.i_register + i as u16) as usize;
 					self.ram[ram_index] = self.v_register[i];
 				}
+				self.i_register = self.i_register + last_index as u16 + 1;
 			}
 			// FX65: Load V[0] to V[x] from M[I]
 			(0xF, _, 6, 5) => {
@@ -406,6 +412,7 @@ impl Emulator {
 					let ram_index = (self.i_register + i as u16) as usize;
 					self.v_register[i] = self.ram[ram_index];
 				}
+				self.i_register = self.i_register + last_index as u16 + 1;				
 			}						
 			(_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
 		}
