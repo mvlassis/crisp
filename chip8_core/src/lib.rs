@@ -28,7 +28,6 @@ const FONTSET: [u8; FONTSET_SIZE] = [
 0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 ];
 
-
 pub struct Emulator {
 	pc: u16,
 	ram: [u8; RAM_SIZE],
@@ -432,17 +431,18 @@ impl Emulator {
 		}
 	}
 
+
 	// Helper function to print the screen state
 	pub fn print_screen(&self) {
 		for i in 0..self.screen.len() {
 			let a = if self.screen[i] == true {"X"} else {" "};
 			print!("{}", a);
 			if i % (SCREEN_WIDTH) == 0 {
-				println!("BOOM");
+				println!("");
 			}
 		}
 		println!("");
-		println!("****************************************************************");
+ 		println!("****************************************************************");
 	}
 }
 
