@@ -1,0 +1,11 @@
+[frontend]
+palette = "obradinn"
+
+default = ["#000000", "#FFFFFF"]
+inverted = ["#FFFFFF", "#000000"]
+obradinn = ["#2e3037", "#ebe5ce"]
+casio = ["#83b07e", "#000000"]
+monitor_glow = ["#222323", "#f0f6f0"]
+paperback = ["#b8c2b9", "#382b26"]
+bitbee = ["#292b30", "#cfab4a"]
+funkyjam = ["#920244", "#fec28c"]

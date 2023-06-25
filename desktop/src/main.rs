@@ -1,7 +1,9 @@
 use chip8_core::*;
+use config::Config;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::Canvas;
@@ -16,6 +18,11 @@ const WINDOW_WIDTH: u32 = (SCREEN_WIDTH as u32) * SCALE;
 const WINDOW_HEIGHT: u32 = (SCREEN_HEIGHT as u32) * SCALE;
 const TICKS_PER_FRAME: usize = 11;
 
+struct Settings {
+	fg_color: Color,
+	bg_color: Color,
+}
+
 fn main() {
 	let args: Vec<_> = env::args().collect();
 	if args.len() != 2 {
@@ -23,6 +30,25 @@ fn main() {
 		return
 	}
 
+	let config = Config::builder()
+		.add_source(config::File::with_name("config.toml"))
+		.build()
+		.unwrap();
+
+	let palette = config.get_string("frontend.palette").unwrap();
+	let palette_name = "frontend.".to_string() + &palette;
+	let palette_colors = config.get_array(&palette_name).unwrap();
+	let palette_colors: Vec<String> = palette_colors.into_iter().filter_map(|value| value.into_string().ok()).collect();
+
+	let bg_color = &palette_colors[0];
+	let (r, g, b) = hex_to_rgb(&bg_color).ok_or("Wrong foreground color").expect("Foreground color");
+	let bg_color = Color::RGB(r, g, b);	
+	
+	let fg_color = &palette_colors[1];
+	let (r, g, b) = hex_to_rgb(&fg_color).ok_or("Wrong foreground color").expect("Foreground color");
+	let fg_color = Color::RGB(r, g, b);
+	
+	
 	let sdl_context = sdl2::init().unwrap();
 	let video_subsystem = sdl_context.video().unwrap();
 
@@ -68,18 +94,18 @@ fn main() {
 			chip8_emulator.tick();
 		}
 		chip8_emulator.tick_timers();
-		draw_window(&chip8_emulator, &mut canvas); 
+		draw_window(&chip8_emulator, &mut canvas, bg_color, fg_color); 
 		::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
 	}
 }
 
-fn draw_window(emu: &Emulator, canvas: &mut Canvas<Window>) {
+fn draw_window(emu: &Emulator, canvas: &mut Canvas<Window>, bg_color: Color, fg_color: Color) {
 
-	canvas.set_draw_color(Color::RGB(0, 0, 0));
+	canvas.set_draw_color(bg_color);
 	canvas.clear();
 
 	let screen_buffer = emu.get_display();
-	canvas.set_draw_color(Color::RGB(255, 255, 255));
+	canvas.set_draw_color(fg_color);
 	for (i, pixel) in screen_buffer.iter().enumerate() {
 		if *pixel {
 			let x = (i % SCREEN_WIDTH) as u32;
@@ -115,3 +141,14 @@ fn key2button(key: Keycode) -> Option<usize> {
 	}
 }
 
+fn hex_to_rgb(hex: &str) -> Option<(u8, u8, u8)> {
+	if hex.len() != 7 {
+		return None;
+	}
+
+	let r = u8::from_str_radix(&hex[1..3], 16).ok()?;
+	let g = u8::from_str_radix(&hex[3..5], 16).ok()?;
+	let b = u8::from_str_radix(&hex[5..7], 16).ok()?;
+
+	Some((r, g, b))
+}
