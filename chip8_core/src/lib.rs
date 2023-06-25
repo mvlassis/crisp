@@ -41,6 +41,7 @@ pub struct Emulator {
 	keys: [bool; NUM_KEYS],
 	delay_timer: u8,
 	sound_timer: u8,
+	pub beep: bool,
 }
 
 const START_ADDRESS: u16 = 0x200;
@@ -58,6 +59,7 @@ impl Emulator {
 			keys: [false; NUM_KEYS],
 			delay_timer: 0,
 			sound_timer: 0,
+			beep: false,
 		};
 
 		new_emulator.ram[..FONTSET_SIZE].copy_from_slice(&FONTSET);
@@ -424,9 +426,10 @@ impl Emulator {
 
 		if self.sound_timer > 0 {
 			self.sound_timer -= 1;
+			self.beep = true;
 
 			if self.sound_timer == 0 {
-				// TODO BEEP
+				self.beep = false;
 			}
 		}
 	}

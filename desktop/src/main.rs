@@ -4,6 +4,7 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 
+use sdl2::audio::{AudioCallback, AudioSpecDesired};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::Canvas;
@@ -21,6 +22,27 @@ const TICKS_PER_FRAME: usize = 11;
 struct Settings {
 	fg_color: Color,
 	bg_color: Color,
+}
+
+struct SquareWave {
+	phase_inc: f32,
+	phase: f32,
+	volume: f32,
+}
+
+impl AudioCallback for SquareWave {
+	type Channel = f32;
+
+	fn callback(&mut self, out: &mut [f32]) {
+		for x in out.iter_mut() {
+			*x = if self.phase <= 0.5 {
+				self.volume
+			} else {
+				-self.volume
+			};
+			self.phase = (self.phase + self.phase_inc) % 1.0;
+		}
+	}
 }
 
 fn main() {
@@ -59,6 +81,21 @@ fn main() {
 	canvas.clear();
 	canvas.present();
 
+	let audio_subsystem = sdl_context.audio().unwrap();
+	let desired_spec = AudioSpecDesired {
+		freq: Some(44100),
+		channels: Some(1), // mono
+		samples: None
+	};
+	let mut audio_device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
+		SquareWave {
+			phase_inc: 440.0 / spec.freq as f32,
+			phase: 0.0,
+			volume: 0.25
+		}
+	}).unwrap();
+	
+
 	let mut event_pump = sdl_context.event_pump().unwrap();
 
 	let mut chip8_emulator = Emulator::new();
@@ -94,7 +131,13 @@ fn main() {
 			chip8_emulator.tick();
 		}
 		chip8_emulator.tick_timers();
-		draw_window(&chip8_emulator, &mut canvas, bg_color, fg_color); 
+		draw_window(&chip8_emulator, &mut canvas, bg_color, fg_color);
+		//audio_device.lock();
+		if chip8_emulator.beep {
+			audio_device.resume();
+		} else {
+			audio_device.pause();
+		}
 		::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
 	}
 }
