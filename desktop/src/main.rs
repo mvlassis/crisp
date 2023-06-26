@@ -3,6 +3,7 @@ use config::Config;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::time::Duration;
 
 use sdl2::audio::{AudioCallback, AudioSpecDesired};
 use sdl2::event::Event;
@@ -11,12 +12,9 @@ use sdl2::render::Canvas;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::video::Window;
-use std::time::Duration;
 
 
 const SCALE:u32 = 10;
-const WINDOW_WIDTH: u32 = (SCREEN_WIDTH as u32) * SCALE;
-const WINDOW_HEIGHT: u32 = (SCREEN_HEIGHT as u32) * SCALE;
 const TICKS_PER_FRAME: usize = 11;
 
 struct Settings {
@@ -74,7 +72,25 @@ fn main() {
 	let sdl_context = sdl2::init().unwrap();
 	let video_subsystem = sdl_context.video().unwrap();
 
-	let window = video_subsystem.window("CHIP-8 Emulator", WINDOW_WIDTH, WINDOW_HEIGHT)
+	let selected_variant = Variant::SChip;
+	let display_wait = match selected_variant {
+		Variant::Chip8 => true,
+		_ => false,
+	};
+	let screen_width = match selected_variant {
+		Variant::Chip8 => 64,
+		Variant::SChip => 128,
+		Variant::XOChip => 128,
+	};
+	let screen_height = match selected_variant {
+		Variant::Chip8 => 32,
+		Variant::SChip => 64,
+		Variant::XOChip => 64,
+	};			
+	let window_width = (screen_width as u32) * SCALE;
+	let window_height = (screen_height as u32) * SCALE;
+		
+	let window = video_subsystem.window("CHIP-8 Emulator", window_width, window_height)
 		.position_centered().opengl().build().unwrap();
 	
 	let mut canvas = window.into_canvas().present_vsync().build().unwrap();
@@ -87,7 +103,7 @@ fn main() {
 		channels: Some(1), // mono
 		samples: None
 	};
-	let mut audio_device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
+	let audio_device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
 		SquareWave {
 			phase_inc: 440.0 / spec.freq as f32,
 			phase: 0.0,
@@ -98,7 +114,7 @@ fn main() {
 
 	let mut event_pump = sdl_context.event_pump().unwrap();
 
-	let mut chip8_emulator = Emulator::new();
+	let mut chip8_emulator = Emulator::new(selected_variant);
 	let mut rom = File::open(&args[1]).expect("Unable to open file");
 	let mut buffer = Vec::new();
 	rom.read_to_end(&mut buffer).unwrap();
@@ -128,11 +144,19 @@ fn main() {
 				_ => ()
 			}
 		}
-		for _ in 0..TICKS_PER_FRAME {
-			chip8_emulator.tick();
+		for i in 0..TICKS_PER_FRAME {
+			if display_wait {
+				match i {
+					0 => chip8_emulator.tick(true),
+					_ => chip8_emulator.tick(false),
+				}				
+			}
+			else {
+				chip8_emulator.tick(true);				
+			}
 		}
 		chip8_emulator.tick_timers();
-		draw_window(&chip8_emulator, &mut canvas, bg_color, fg_color);
+		draw_window(&chip8_emulator, &mut canvas, bg_color, fg_color, screen_width);
 		//audio_device.lock();
 		if chip8_emulator.beep {
 			audio_device.resume();
@@ -143,7 +167,7 @@ fn main() {
 	}
 }
 
-fn draw_window(emu: &Emulator, canvas: &mut Canvas<Window>, bg_color: Color, fg_color: Color) {
+fn draw_window(emu: &Emulator, canvas: &mut Canvas<Window>, bg_color: Color, fg_color: Color, screen_width: usize) {
 
 	canvas.set_draw_color(bg_color);
 	canvas.clear();
@@ -152,8 +176,8 @@ fn draw_window(emu: &Emulator, canvas: &mut Canvas<Window>, bg_color: Color, fg_
 	canvas.set_draw_color(fg_color);
 	for (i, pixel) in screen_buffer.iter().enumerate() {
 		if *pixel {
-			let x = (i % SCREEN_WIDTH) as u32;
-			let y = (i / SCREEN_WIDTH) as u32;
+			let x = (i % screen_width) as u32;
+			let y = (i / screen_width) as u32;
 
 			let rect = Rect::new((x * SCALE) as i32, (y * SCALE) as i32, SCALE, SCALE);
 			canvas.fill_rect(rect).unwrap();

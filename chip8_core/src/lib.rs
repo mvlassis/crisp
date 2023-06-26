@@ -1,8 +1,5 @@
 use rand::Rng;
 
-pub const SCREEN_WIDTH: usize = 64;
-pub const SCREEN_HEIGHT: usize = 32;
-
 const RAM_SIZE: usize = 4096;
 const NUM_REGISTERS: usize = 16;
 const STACK_SIZE: usize = 16;
@@ -31,7 +28,7 @@ const FONTSET: [u8; FONTSET_SIZE] = [
 pub struct Emulator {
 	pc: u16,
 	ram: [u8; RAM_SIZE],
-	screen: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
+	screen: Vec<bool>,
 	// FYI: v stands for "variable"
 	v_register: [u8; NUM_REGISTERS],
 	// The I register only needs 12 bits
@@ -42,16 +39,40 @@ pub struct Emulator {
 	delay_timer: u8,
 	sound_timer: u8,
 	pub beep: bool,
+	variant: Variant,
+	screen_width: usize,
+	screen_height: usize,
+	key_frame: bool,
+
+	// Needed for the SChip variant	
+	high_res_mode: bool,
+	rpl: [u8; 8],
 }
 
 const START_ADDRESS: u16 = 0x200;
 
+pub enum Variant {
+	Chip8,
+	SChip,
+	XOChip,
+}
+
 impl Emulator {
-	pub fn new() -> Self {
+	pub fn new(selected_variant: Variant) -> Self {
+		let width = match selected_variant {
+			Variant::Chip8 => 64,
+			Variant::SChip => 128,
+			Variant::XOChip => 128,
+		};
+		let height = match selected_variant {
+			Variant::Chip8 => 32,
+			Variant::SChip => 64,
+			Variant::XOChip => 64,
+		};		
 		let mut new_emulator = Self {
 			pc: START_ADDRESS,
 			ram: [0; RAM_SIZE],
-			screen: [false; SCREEN_WIDTH * SCREEN_HEIGHT],
+			screen: vec![false; width * height],
 			v_register: [0; NUM_REGISTERS],
 			i_register: 0,
 			stack_pointer: -1,
@@ -60,6 +81,13 @@ impl Emulator {
 			delay_timer: 0,
 			sound_timer: 0,
 			beep: false,
+			variant: selected_variant,
+			screen_width: width,
+			screen_height: height,
+			key_frame: true,
+
+			high_res_mode: false,
+			rpl: [0; 8],
 		};
 
 		new_emulator.ram[..FONTSET_SIZE].copy_from_slice(&FONTSET);
@@ -79,7 +107,7 @@ impl Emulator {
 	pub fn reset(&mut self) {
 		self.pc = START_ADDRESS;
 		self.ram = [0; RAM_SIZE];
-		self.screen = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
+		self.screen = vec![false; self.screen_width * self.screen_height];
 		self.v_register = [0; NUM_REGISTERS];
 		self.i_register = 0;
 		self.stack_pointer = -1;
@@ -88,9 +116,13 @@ impl Emulator {
 		self.delay_timer = 0;
 		self.sound_timer = 0;
 		self.ram[..FONTSET_SIZE].copy_from_slice(&FONTSET);
+		self.key_frame = true;
+
+		self.high_res_mode = false;
 	}
 	
-	pub fn tick(&mut self) {
+	pub fn tick(&mut self, key_frame: bool) {
+		self.key_frame = key_frame;
 		// Fetch
 		let op = self.fetch();
 		// Decode and Execute
@@ -132,7 +164,9 @@ impl Emulator {
 			}
 			// 00E0: Clear screen
 			(0x0, 0x0, 0xE, 0x0) => {
-				self.screen = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
+				for pixel in self.screen.iter_mut() {
+					*pixel = false;
+				}
 			},
 			// 00EE: Return from subroutine
 			(0x0, 0x0, 0xE, 0xE) => {
@@ -197,18 +231,30 @@ impl Emulator {
 				let v_index1 = digit2 as usize;
 				let v_index2 = digit3 as usize;
 				self.v_register[v_index1] = self.v_register[v_index1] | self.v_register[v_index2];
+				match self.variant {
+					Variant::Chip8 => self.v_register[0xF] = 0,
+					Variant::SChip | Variant::XOChip => (),
+				}
 			}
 			// 8XY2: V[x] = V[x] AND V[y]
 			(0x8, _, _, 2) => {
 				let v_index1 = digit2 as usize;
 				let v_index2 = digit3 as usize;
 				self.v_register[v_index1] = self.v_register[v_index1] & self.v_register[v_index2];
+				match self.variant {
+					Variant::Chip8 => self.v_register[0xF] = 0,
+					Variant::SChip | Variant::XOChip => (),
+				}
 			}
 			// 8XY3: V[x] = V[x] XOR V[y]
 			(0x8, _, _, 3) => {
 				let v_index1 = digit2 as usize;
 				let v_index2 = digit3 as usize;
 				self.v_register[v_index1] = self.v_register[v_index1] ^ self.v_register[v_index2];
+				match self.variant {
+					Variant::Chip8 => self.v_register[0xF] = 0,
+					_ => (),
+				}
 			}
 			// 8XY4: V[x] = V[x] + V[y], V[F] = 1 if overflow
 			(0x8, _, _, 4) => {
@@ -241,7 +287,11 @@ impl Emulator {
 				let index1 = digit2 as usize;
 				let index2 = digit3 as usize;
 				// TODO: QUIRK OPTION
-				self.v_register[index1] = self.v_register[index2];
+				match self.variant {
+					Variant::Chip8 => self.v_register[index1] = self.v_register[index2],
+					Variant::SChip => (),
+					Variant::XOChip => self.v_register[index1] = self.v_register[index2],
+				}
 				let lsb = self.v_register[index1] & 1;
 				self.v_register[index1] >>= 1;
 				self.v_register[0xF] = lsb;
@@ -263,7 +313,11 @@ impl Emulator {
 			(0x8, _, _, 0xE) => {
 				let index1 = digit2 as usize;
 				let index2 = digit3 as usize;
-				self.v_register[index1] = self.v_register[index2];
+				match self.variant {
+					Variant::Chip8 => self.v_register[index1] = self.v_register[index2],
+					Variant::SChip => (),
+					Variant::XOChip => self.v_register[index1] = self.v_register[index2],
+				}
 				let msb = (self.v_register[index1] >> 7) & 1;
 				self.v_register[index1] <<= 1;
 				self.v_register[0xF] = msb;
@@ -283,8 +337,13 @@ impl Emulator {
 			}
 			// BMMM: Jump to MMM + V[0]
 			(0xB, _, _, _) => {
-				let index = (op & 0xFFF) as u16;
-				self.pc = index + (self.v_register[0] as u16);
+				let address = (op & 0xFFF) as u16;
+				let index = match self.variant {
+					Variant::Chip8 => 0,
+					Variant::SChip => digit2 as usize,
+					Variant::XOChip => 0,
+				};
+				self.pc = address + (self.v_register[index] as u16);
 			}
 			// CXNN: Get random byte, then AND with NN
 			(0xC, _, _, _) => {
@@ -293,12 +352,25 @@ impl Emulator {
 				let value = (op & 0xFF) as u8;
 				self.v_register[index] = value & random_byte;
 			}
-			// DXYN: Display sprite of N rows at coordinates V[x], V[y]
+			// DXYN: Draw sprite of N rows at coordinates V[x], V[y]
+			// TODO DXY0 ON SCHIP
 			(0xD, _, _, _) => {
+				match self.variant {
+					Variant::Chip8 => {
+						if self.key_frame == false {
+							self.pc -= 2;
+							return;
+						}
+					}
+					_ => (),
+				}
                 let mut flipped = false;
                 // Get the base (x, y) coords
-                let x_base = self.v_register[digit2 as usize] as u16;
-                let y_base = self.v_register[digit3 as usize] as u16;
+                let x_base = (self.v_register[digit2 as usize] %
+							  self.screen_width as u8) as u16;
+                let y_base = (self.v_register[digit3 as usize] %
+							  self.screen_height as u8) as u16;
+
                 // The last digit determines how many rows high our sprite is
                 let num_rows = digit4;
                 for row in 0..num_rows {
@@ -309,21 +381,36 @@ impl Emulator {
                         // Use a mask to fetch current pixel's bit. Only flip if a 1
                         if (pixels & (0b1000_0000 >> column)) != 0 {
                             // Sprites should wrap around screen, so apply modulo
-                            let x = (x_base + column) as usize % SCREEN_WIDTH;
-                            let y = (y_base + row) as usize % SCREEN_HEIGHT;
+                            let x = (x_base + column) as usize;
+                            let y = (y_base + row) as usize;
 
-                            let index = x + SCREEN_WIDTH * y;
-                            flipped |= self.screen[index];
-                            self.screen[index] ^= true;
+                            let mut index = x + self.screen_width * y;
+
+							match self.variant {
+								Variant::Chip8 => {
+									if x < self.screen_width && y < self.screen_height {
+											flipped |= self.screen[index];
+											self.screen[index] ^= true;	
+										}
+								}
+								Variant::SChip | Variant::XOChip => {
+									// Wrap around the screen
+									index = (x % self.screen_width) +
+										self.screen_width * (y % self.screen_height);
+									flipped |= self.screen[index];
+									self.screen[index] ^= true;
+								}
+							}
                         }
                     }
                 }
+            
                 if flipped {
                     self.v_register[0xF] = 1;
                 } else {
                     self.v_register[0xF] = 0;
                 }
-            }
+			}
 			// EX9E - Skip if key VX is pressed
 			(0xE, _, 0x9, 0xE) => {
 				let index = digit2 as usize;
@@ -404,7 +491,15 @@ impl Emulator {
 					let ram_index = (self.i_register + i as u16) as usize;
 					self.ram[ram_index] = self.v_register[i];
 				}
-				self.i_register = self.i_register + last_index as u16 + 1;
+				match self.variant {
+					Variant::Chip8 => {
+						self.i_register = self.i_register + last_index as u16 + 1;		
+					}
+					Variant::XOChip => {
+						self.i_register = self.i_register + last_index as u16 + 1;		
+					}					
+					Variant::SChip => ()
+				}
 			}
 			// FX65: Load V[0] to V[x] from M[I]
 			(0xF, _, 6, 5) => {
@@ -413,8 +508,92 @@ impl Emulator {
 					let ram_index = (self.i_register + i as u16) as usize;
 					self.v_register[i] = self.ram[ram_index];
 				}
-				self.i_register = self.i_register + last_index as u16 + 1;				
-			}						
+				match self.variant {
+					Variant::Chip8 => {
+						self.i_register = self.i_register + last_index as u16 + 1;		
+					}
+					Variant::XOChip => {
+						self.i_register = self.i_register + last_index as u16 + 1;		
+					}
+					Variant::SChip => ()
+					
+				}								
+			}
+			// Extra commands for the SUPER-CHIP variant
+			// 00FD: Exit interpreter
+			(0x0, 0x0, 0xF, 0xD) => {
+				self.pc = 0x200;
+			}
+			// 00DE: Disable high-resolution mode
+			(0x0, 0x0, 0xF, 0xE) => {
+				self.high_res_mode = false;
+			}
+			// 00FF: Enable high-resolution mode
+			(0x0, 0x0, 0xF, 0xF) => {
+				self.high_res_mode = true;
+			}
+			// FX75: Store V[0]-V[X] in RPL flags
+			(0xF, _, 0x7, 0x5) => {
+				let last_index = digit2 as usize;
+				self.rpl[..=last_index].copy_from_slice(&self.v_register[..=last_index]);
+			}
+			// FX85: Read V[0]-V[X] from RPL user flags
+			(0xF, _, 0x8, 0x5) => {
+				let last_index = digit2 as usize;
+				self.v_register[..=last_index].copy_from_slice(&self.rpl[..last_index]);
+			}
+			// 00CN: Scroll display N pixels down (N/2 in low resolution mode)
+			(0x0, 0x0, 0xC, _) => {
+				let scroll_value = match self.high_res_mode {
+					true => digit4 as usize,
+					false => (digit4 / 2) as usize,
+				};
+				for x in 0..self.screen_width {
+					for y in (0..self.screen_height).rev() {
+						if self.screen[y * self.screen_width + x] == true
+							&& y < self.screen_height - scroll_value {
+								self.screen[(y+scroll_value) * self.screen_width + x] = true;
+							}
+						self.screen[y * self.screen_width + x] = false;
+					}
+				}
+			}
+			// 00FB: Scroll display right by 4 pixels (2 in low resolution mode)
+			(0x0, 0x0, 0xF, 0xB) => {
+				let scroll_value = match self.high_res_mode {
+						true => 4,
+						false => 2,
+				};
+				for y in 0..self.screen_height {
+					for x in (0..self.screen_width).rev() {
+						if self.screen[y * self.screen_width + x] == true
+							&& x <=	self.screen_width - scroll_value {
+								self.screen[y * self.screen_width+x+scroll_value] = true;
+							}
+						self.screen[y * self.screen_width + x] = false;	
+					}
+				}
+			}
+			// 00FC: Scroll display left by 4 pixels (2 in low resolution mode)
+			(0x0, 0x0, 0xF, 0xC) => {
+				let scroll_value = match self.high_res_mode {
+						true => 4,
+						false => 2,
+				};
+				for y in 0..self.screen_height {
+					for x in 0..self.screen_width {
+						if self.screen[y * self.screen_width + x] == true
+							&& x >= scroll_value {
+								self.screen[y * self.screen_width+x-scroll_value] = true;
+							}
+						self.screen[y * self.screen_width + x] = false;
+					}
+				}				
+			}
+			// FX30: Set I to 10-byte digit V[x]
+			// (0xF, _, 0x3, 0x0) => {
+				
+			// }
 			(_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
 		}
 	}
@@ -440,7 +619,7 @@ impl Emulator {
 		for i in 0..self.screen.len() {
 			let a = if self.screen[i] == true {"X"} else {" "};
 			print!("{}", a);
-			if i % (SCREEN_WIDTH) == 0 {
+			if i % (self.screen_width) == 0 {
 				println!("");
 			}
 		}
