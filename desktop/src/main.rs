@@ -111,8 +111,9 @@ fn main() {
 				Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
 					break 'running
 				},
-				Event::KeyDown { keycode: Some(Keycode::R), .. } => {
-				chip8_emulator.reset();
+				Event::KeyDown { keycode: Some(Keycode::T), .. } => {
+					chip8_emulator.reset();
+					chip8_emulator.load(&buffer);
 			}
 				Event::KeyDown { keycode: Some(key), ..} => {
 					if let Some(k) = key2button(key) {
