@@ -1,8 +1,10 @@
 # chip-8-rust
-Chip-8 emulator written in rust
+Chip-8 emulator written in Rust
 
 ## Features
 - All opcodes of the original Chip-8 implemented
+- All quirks of the original Chip-8 correctly implemented
+- Support for the SCHIP-1.1 variant
 - Sound support
 - Configuration file to store all settings
 - Reset button
@@ -14,3 +16,5 @@ Chip-8 emulator written in rust
 - Add customization options
 - Add pause/resume button
 - ~~Add reset button~~
+- ~~Support SCHIP-1.1 variant~~
+- Support XO-CHIP variant

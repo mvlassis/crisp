@@ -22,7 +22,21 @@ const FONTSET: [u8; FONTSET_SIZE] = [
 0xF0, 0x80, 0x80, 0x80, 0xF0, // C
 0xE0, 0x90, 0x90, 0x90, 0xE0, // D
 0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+];
+
+const FONTSET_BIG_SIZE: usize = 100;
+const FONTSET_BIG: [u8; FONTSET_BIG_SIZE] = [
+    0x3C, 0x7E, 0xC3, 0xC3, 0xC3, 0xC3, 0xC3, 0xC3, 0x7E, 0x3C, // 0
+    0x18, 0x38, 0x58, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x7E, // 1
+    0x3E, 0x7F, 0xC3, 0x06, 0x0C, 0x18, 0x30, 0x60, 0xFF, 0xFF, // 2
+    0x3C, 0x7E, 0xC3, 0x03, 0x0E, 0x0E, 0x03, 0xC3, 0x7E, 0x3C, // 3
+    0x06, 0x0E, 0x1E, 0x36, 0x66, 0xC6, 0xFF, 0xFF, 0x06, 0x06, // 4
+    0xFF, 0xFF, 0xC0, 0xC0, 0xFC, 0xFE, 0x03, 0xC3, 0x7E, 0x3C, // 5
+    0x3E, 0x7C, 0xC0, 0xC0, 0xFC, 0xFE, 0xC3, 0xC3, 0x7E, 0x3C, // 6
+    0xFF, 0xFF, 0x03, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x60, 0x60, // 7
+    0x3C, 0x7E, 0xC3, 0xC3, 0x7E, 0x7E, 0xC3, 0xC3, 0x7E, 0x3C, // 8
+    0x3C, 0x7E, 0xC3, 0xC3, 0x7F, 0x3F, 0x03, 0x03, 0x3E, 0x7C, // 9
 ];
 
 pub struct Emulator {
@@ -91,6 +105,9 @@ impl Emulator {
 		};
 
 		new_emulator.ram[..FONTSET_SIZE].copy_from_slice(&FONTSET);
+		new_emulator.ram[FONTSET_SIZE..FONTSET_SIZE+FONTSET_BIG_SIZE].copy_from_slice(
+			&FONTSET_BIG
+		);
 		new_emulator
 	}
 	
@@ -116,6 +133,9 @@ impl Emulator {
 		self.delay_timer = 0;
 		self.sound_timer = 0;
 		self.ram[..FONTSET_SIZE].copy_from_slice(&FONTSET);
+		self.ram[FONTSET_SIZE..FONTSET_SIZE+FONTSET_BIG_SIZE].copy_from_slice(
+			&FONTSET_BIG
+		);
 		self.key_frame = true;
 
 		self.high_res_mode = false;
@@ -361,55 +381,97 @@ impl Emulator {
 							self.pc -= 2;
 							return;
 						}
-					}
-					_ => (),
-				}
-                let mut flipped = false;
-                // Get the base (x, y) coords
-                let x_base = (self.v_register[digit2 as usize] %
-							  self.screen_width as u8) as u16;
-                let y_base = (self.v_register[digit3 as usize] %
-							  self.screen_height as u8) as u16;
+						let mut flipped = false;
+						// Get the base (x, y) coords
+						let x_base = (self.v_register[digit2 as usize] %
+									  self.screen_width as u8) as u16;
+						let y_base = (self.v_register[digit3 as usize] %
+									  self.screen_height as u8) as u16;
 
-                // The last digit determines how many rows high our sprite is
-                let num_rows = digit4;
-                for row in 0..num_rows {
-                    // Determine which memory address our row's data is stored
-                    let address = self.i_register + row as u16;
-                    let pixels = self.ram[address as usize];
-                    for column in 0..8 {
-                        // Use a mask to fetch current pixel's bit. Only flip if a 1
-                        if (pixels & (0b1000_0000 >> column)) != 0 {
-                            // Sprites should wrap around screen, so apply modulo
-                            let x = (x_base + column) as usize;
-                            let y = (y_base + row) as usize;
+						// The last digit determines how many rows high our sprite is
+						let num_rows = digit4;
+						for row in 0..num_rows {
+							// Determine which memory address our row's data is stored
+							let address = self.i_register + row as u16;
+							let pixels = self.ram[address as usize];
+							for column in 0..8 {
+								// Use a mask to fetch current pixel's bit. Only flip if a 1
+								if (pixels & (0b1000_0000 >> column)) != 0 {
+									// Sprites should wrap around screen, so apply modulo
+									let x = (x_base + column) as usize;
+									let y = (y_base + row) as usize;
 
-                            let mut index = x + self.screen_width * y;
+									let mut index = x + self.screen_width * y;
 
-							match self.variant {
-								Variant::Chip8 => {
 									if x < self.screen_width && y < self.screen_height {
-											flipped |= self.screen[index];
-											self.screen[index] ^= true;	
-										}
-								}
-								Variant::SChip | Variant::XOChip => {
-									// Wrap around the screen
-									index = (x % self.screen_width) +
-										self.screen_width * (y % self.screen_height);
-									flipped |= self.screen[index];
-									self.screen[index] ^= true;
+										flipped |= self.screen[index];
+										self.screen[index] ^= true;	
+									}
 								}
 							}
-                        }
-                    }
-                }
-            
-                if flipped {
-                    self.v_register[0xF] = 1;
-                } else {
-                    self.v_register[0xF] = 0;
-                }
+						}
+						if flipped {
+							self.v_register[0xF] = 1;
+						}
+						else {
+							self.v_register[0xF] = 0;
+						}
+					}
+					Variant::SChip => {
+						let mut flipped = false;
+						// Get the base (x, y) coords
+						let x_base = (self.v_register[digit2 as usize] %
+									  self.screen_width as u8) as u16;
+						let y_base = (self.v_register[digit3 as usize] %
+									  self.screen_height as u8) as u16;
+
+						// The last digit determines how many rows high our sprite is
+						let num_rows = digit4;
+						for row in 0..num_rows {
+							// Determine which memory address our row's data is stored
+							let address = self.i_register + row as u16;
+							let pixels = self.ram[address as usize];
+							for column in 0..8 {
+								// Use a mask to fetch current pixel's bit. Only flip if a 1
+								if (pixels & (0b1000_0000 >> column)) != 0 {
+									if self.high_res_mode == true {
+										// Wrap sprite around the screen
+										let x = (x_base + column) as usize % self.screen_width;
+										let y = (y_base + row) as usize % self.screen_height;
+
+										let mut index = x + self.screen_width * y;
+
+										index = x +	self.screen_width * y;
+										flipped |= self.screen[index];
+										self.screen[index] ^= true;	
+									}
+									else if self.high_res_mode == false {
+										let x = 2 * (x_base + column) as usize % self.screen_width;
+										let y = 2 * (y_base + row) as usize % self.screen_height;
+										let index = x + self.screen_width * y;
+										self.screen[index] ^= true;
+										self.screen[index + 1] ^= true;
+										self.screen[index + self.screen_width] ^= true;
+										self.screen[index + self.screen_width + 1] ^= true;
+										flipped |= self.screen[index];
+										flipped |= self.screen[index+1];
+										flipped |= self.screen[index+self.screen_width];
+										flipped |= self.screen[index+self.screen_width+1];
+									}
+								}
+							}
+						}
+						// TODO: SCHIP update V[F]
+						if flipped {
+							self.v_register[0xF] = 1;
+						}
+						else {
+							self.v_register[0xF] = 0;
+						}
+					}						
+					
+					_ => (),
+				}
 			}
 			// EX9E - Skip if key VX is pressed
 			(0xE, _, 0x9, 0xE) => {
@@ -524,7 +586,7 @@ impl Emulator {
 			(0x0, 0x0, 0xF, 0xD) => {
 				self.pc = 0x200;
 			}
-			// 00DE: Disable high-resolution mode
+			// 00FE: Disable high-resolution mode
 			(0x0, 0x0, 0xF, 0xE) => {
 				self.high_res_mode = false;
 			}
@@ -540,14 +602,11 @@ impl Emulator {
 			// FX85: Read V[0]-V[X] from RPL user flags
 			(0xF, _, 0x8, 0x5) => {
 				let last_index = digit2 as usize;
-				self.v_register[..=last_index].copy_from_slice(&self.rpl[..last_index]);
+				self.v_register[..=last_index].copy_from_slice(&self.rpl[..=last_index]);
 			}
 			// 00CN: Scroll display N pixels down (N/2 in low resolution mode)
 			(0x0, 0x0, 0xC, _) => {
-				let scroll_value = match self.high_res_mode {
-					true => digit4 as usize,
-					false => (digit4 / 2) as usize,
-				};
+				let scroll_value = digit4 as usize;
 				for x in 0..self.screen_width {
 					for y in (0..self.screen_height).rev() {
 						if self.screen[y * self.screen_width + x] == true
@@ -560,10 +619,7 @@ impl Emulator {
 			}
 			// 00FB: Scroll display right by 4 pixels (2 in low resolution mode)
 			(0x0, 0x0, 0xF, 0xB) => {
-				let scroll_value = match self.high_res_mode {
-						true => 4,
-						false => 2,
-				};
+				let scroll_value = 4;
 				for y in 0..self.screen_height {
 					for x in (0..self.screen_width).rev() {
 						if self.screen[y * self.screen_width + x] == true
@@ -576,10 +632,7 @@ impl Emulator {
 			}
 			// 00FC: Scroll display left by 4 pixels (2 in low resolution mode)
 			(0x0, 0x0, 0xF, 0xC) => {
-				let scroll_value = match self.high_res_mode {
-						true => 4,
-						false => 2,
-				};
+				let scroll_value = 4;
 				for y in 0..self.screen_height {
 					for x in 0..self.screen_width {
 						if self.screen[y * self.screen_width + x] == true
@@ -590,10 +643,12 @@ impl Emulator {
 					}
 				}				
 			}
-			// FX30: Set I to 10-byte digit V[x]
-			// (0xF, _, 0x3, 0x0) => {
-				
-			// }
+			// FX30: Set I to 10-byte font for digit V[x] 
+			(0xF, _, 0x3, 0x0) => {
+				let index = digit2 as usize;
+				let character = self.v_register[index] as u16;
+				self.i_register = FONTSET_SIZE as u16 + character * 10;
+			}
 			(_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
 		}
 	}
