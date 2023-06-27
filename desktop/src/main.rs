@@ -15,7 +15,7 @@ use sdl2::video::Window;
 
 
 const SCALE:u32 = 10;
-const TICKS_PER_FRAME: usize = 15;
+const TICKS_PER_FRAME: usize = 10;
 
 struct Settings {
 	fg_color: Color,

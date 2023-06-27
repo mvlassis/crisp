@@ -1,5 +1,5 @@
 [frontend]
-palette = "obradinn"
+palette = "bitbee"
 
 default = ["#000000", "#FFFFFF"]
 inverted = ["#FFFFFF", "#000000"]

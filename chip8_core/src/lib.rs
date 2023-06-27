@@ -5,6 +5,7 @@ const NUM_REGISTERS: usize = 16;
 const STACK_SIZE: usize = 16;
 const NUM_KEYS: usize = 16;
 
+// 80 bytes for the standard font
 const FONTSET_SIZE: usize = 80;
 const FONTSET: [u8; FONTSET_SIZE] = [
 0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -25,6 +26,7 @@ const FONTSET: [u8; FONTSET_SIZE] = [
 0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
+// 100 bytes for the big font
 const FONTSET_BIG_SIZE: usize = 100;
 const FONTSET_BIG: [u8; FONTSET_BIG_SIZE] = [
     0x3C, 0x7E, 0xC3, 0xC3, 0xC3, 0xC3, 0xC3, 0xC3, 0x7E, 0x3C, // 0
@@ -401,7 +403,7 @@ impl Emulator {
 									let x = (x_base + column) as usize;
 									let y = (y_base + row) as usize;
 
-									let mut index = x + self.screen_width * y;
+									let index = x + self.screen_width * y;
 
 									if x < self.screen_width && y < self.screen_height {
 										flipped |= self.screen[index];
@@ -418,55 +420,123 @@ impl Emulator {
 						}
 					}
 					Variant::SChip => {
-						let mut flipped = false;
+						let mut flipped = 0;
 						// Get the base (x, y) coords
 						let x_base = (self.v_register[digit2 as usize] %
 									  self.screen_width as u8) as u16;
 						let y_base = (self.v_register[digit3 as usize] %
 									  self.screen_height as u8) as u16;
 
-						// The last digit determines how many rows high our sprite is
-						let num_rows = digit4;
-						for row in 0..num_rows {
-							// Determine which memory address our row's data is stored
-							let address = self.i_register + row as u16;
-							let pixels = self.ram[address as usize];
-							for column in 0..8 {
-								// Use a mask to fetch current pixel's bit. Only flip if a 1
-								if (pixels & (0b1000_0000 >> column)) != 0 {
-									if self.high_res_mode == true {
-										// Wrap sprite around the screen
-										let x = (x_base + column) as usize % self.screen_width;
-										let y = (y_base + row) as usize % self.screen_height;
-
-										let mut index = x + self.screen_width * y;
-
-										index = x +	self.screen_width * y;
-										flipped |= self.screen[index];
-										self.screen[index] ^= true;	
-									}
-									else if self.high_res_mode == false {
-										let x = 2 * (x_base + column) as usize % self.screen_width;
-										let y = 2 * (y_base + row) as usize % self.screen_height;
+						if digit4 == 0 && self.high_res_mode == true {
+							let num_rows = 16;
+							for row in 0..num_rows {
+								let mut row_flipped = false;
+								let address1 = self.i_register + 2*row as u16;
+								let address2 = self.i_register + 2*row + 1 as u16;
+								let pixels1 = self.ram[address1 as usize];
+								let pixels2 = self.ram[address2 as usize];
+								for column in 0..8  {
+									if (pixels1 as u16 & (0b1000_0000 >> column)) != 0 {
+										let x = (x_base + column) as usize;
+										let y = (y_base + row) as usize;
+										
 										let index = x + self.screen_width * y;
-										self.screen[index] ^= true;
-										self.screen[index + 1] ^= true;
-										self.screen[index + self.screen_width] ^= true;
-										self.screen[index + self.screen_width + 1] ^= true;
-										flipped |= self.screen[index];
-										flipped |= self.screen[index+1];
-										flipped |= self.screen[index+self.screen_width];
-										flipped |= self.screen[index+self.screen_width+1];
+										if x < self.screen_width && y < self.screen_height {
+											row_flipped |= self.screen[index];
+											self.screen[index] ^= true;
+										}
+										else {
+											// Clipping counts as a collision in SCHIP
+											row_flipped = true;
+										}
 									}
+								}
+								for column in 0..8  {
+									if (pixels2 as u16 & (0b1000_0000 >> column)) != 0 {
+										let x = (x_base + 8 + column) as usize;
+										let y = (y_base + row) as usize;
+										let index = x + self.screen_width * y;
+										if x < self.screen_width && y < self.screen_height {
+											row_flipped |= self.screen[index];
+											self.screen[index] ^= true;
+										}
+										else {
+											// Clipping counts as a collision in SCHIP
+											row_flipped = true;
+										}
+									}
+								}
+								if row_flipped == true {
+									flipped += 1;
 								}
 							}
 						}
-						// TODO: SCHIP update V[F]
-						if flipped {
-							self.v_register[0xF] = 1;
+						else {
+							// DXY0 will draw 8x16 sprite (16 rows) in low_res mode
+							let num_rows = if digit4 == 0 {16} else {digit4};
+							for row in 0..num_rows {
+								let mut row_flipped = false;
+								// Determine which memory address our row's data is stored
+								let address = self.i_register + row as u16;
+								let pixels = self.ram[address as usize];
+								for column in 0..8 {
+									// Use a mask to fetch current pixel's bit. Only flip if a 1
+									if (pixels as u16 & (0b1000_0000 >> column)) != 0 {
+										if self.high_res_mode == true {
+											let x = (x_base + column) as usize;
+											let y = (y_base + row) as usize;
+
+											let index = x + self.screen_width * y;
+											// Clip if it exceeds screen dimensions
+											if x < self.screen_width && y < self.screen_height {
+												row_flipped |= self.screen[index];
+												self.screen[index] ^= true;
+											}
+											else {
+												// Clipping counts as a collision in SCHIP
+												row_flipped = true;
+											}
+										}
+										else if self.high_res_mode == false {
+											// Get the x_base and y_base again
+											// since we need to wrap around the low_res
+											// low_res dimensions
+											let x_base = (self.v_register[digit2 as usize] %
+														  (self.screen_width / 2)  as u8) as u16;
+											let y_base = (self.v_register[digit3 as usize] %
+														  (self.screen_height / 2) as u8) as u16;
+											let x = 2 * (x_base + column) as usize;
+											let y = 2 * (y_base + row) as usize;
+											let index = x + self.screen_width * y;
+											if x < self.screen_width && y < self.screen_height {
+												row_flipped |= self.screen[index];
+												self.screen[index] ^= true;
+												row_flipped |= self.screen[index+1];
+												self.screen[index+1] ^= true;
+												row_flipped |= self.screen[index+self.screen_width];
+												self.screen[index+self.screen_width] ^= true;
+												row_flipped |= self.screen[index+self.screen_width + 1];
+												self.screen[index+self.screen_width+1] ^= true;
+											}	
+										}
+									}
+								}
+								if row_flipped == true {
+									flipped += 1;
+								}
+							}
+						}
+						if self.high_res_mode == true {
+							self.v_register[0xF] = flipped;
 						}
 						else {
-							self.v_register[0xF] = 0;
+							if flipped > 0 {
+								self.v_register[0xF] = 1;	
+							}
+							else {
+								self.v_register[0xF] = 0;
+							}
+							
 						}
 					}						
 					
@@ -535,7 +605,6 @@ impl Emulator {
 					
 			}
 			// FX33: Store 3 digits of V[x] at M[I]
-			// TODO: Optimize BCD
 			(0xF, _, 3, 3) => {
 				let index = digit2 as usize;
 				let value = self.v_register[index];
@@ -682,5 +751,4 @@ impl Emulator {
  		println!("****************************************************************");
 	}
 }
-
 
