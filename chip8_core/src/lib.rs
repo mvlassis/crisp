@@ -1,6 +1,8 @@
 use rand::Rng;
 
 const RAM_SIZE: usize = 4096;
+const RAM_SIZE_XO: usize = 65536;
+
 const NUM_REGISTERS: usize = 16;
 const STACK_SIZE: usize = 16;
 const NUM_KEYS: usize = 16;
@@ -43,7 +45,8 @@ const FONTSET_BIG: [u8; FONTSET_BIG_SIZE] = [
 
 pub struct Emulator {
 	pc: u16,
-	ram: [u8; RAM_SIZE],
+	ram_size: usize,
+	ram: Vec<u8>,
 	screen: Vec<bool>,
 	// FYI: v stands for "variable"
 	v_register: [u8; NUM_REGISTERS],
@@ -98,10 +101,15 @@ impl Emulator {
 			Variant::Chip8 => 32,
 			Variant::SChip => 64,
 			Variant::XOChip => 64,
-		};		
+		};
+		let platform_ram_size = match selected_variant {
+			Variant::Chip8 | Variant::SChip => RAM_SIZE,
+			Variant::XOChip => RAM_SIZE_XO,
+		};
 		let mut new_emulator = Self {
 			pc: START_ADDRESS,
-			ram: [0; RAM_SIZE],
+			ram_size: platform_ram_size,
+			ram: vec![0; platform_ram_size],
 			screen: vec![false; width * height],
 			v_register: [0; NUM_REGISTERS],
 			i_register: 0,
@@ -143,7 +151,7 @@ impl Emulator {
 
 	pub fn reset(&mut self) {
 		self.pc = START_ADDRESS;
-		self.ram = [0; RAM_SIZE];
+		self.ram = vec![0; self.ram_size];
 		self.screen = vec![false; self.screen_width * self.screen_height];
 		self.v_register = [0; NUM_REGISTERS];
 		self.i_register = 0;
@@ -173,8 +181,8 @@ impl Emulator {
 		self.execute(op);
 	}
 
-	pub fn get_display(&self) -> &[bool]{
-		&self.screen
+	pub fn get_display(&self) -> (&[bool], &[bool]){
+		(&self.screen, &self.screen2)
 	}
 
 	pub fn register_keypress(&mut self, index: usize, pressed: bool) {
@@ -237,10 +245,11 @@ impl Emulator {
 		let digit3 = ((op & 0x00F0) >> 4) as u8;
 		let digit4 = (op & 0x000F) as u8;
 
+		// println!("{:#04x}", op);
+
 		match (digit1, digit2, digit3, digit4) {
 			// 0000: Nop
 			(0x0, 0x0, 0x0, 0x0) => self.opcode_0000(),
-			
 			
 			// 00E0: Clear screen
 			(0x0, 0x0, 0xE, 0x0) => self.opcode_00e0(),
@@ -375,6 +384,9 @@ impl Emulator {
 			(0xF, _, 0x3, 0x0) => self.opcode_fx30(digit2),
 			
 			// Opcodes for the XOChip
+			// 00DN: Scroll display up by N pixels (N/2 in low resolution mode)
+			(0x0, 0x0, 0xD, _) => self.opcode_00dn(digit4),
+			
 			// 5YX2: Save V[x] to V[y] in memory starting at I
 			(0x5, _, _, 0x2) => self.opcode_5xy2(digit2, digit3),
 			
@@ -397,6 +409,219 @@ impl Emulator {
 		}
 	}
 
+	fn draw_sprite(&mut self, x_base: u16, y_base: u16, n: u8, base_address: u16, plane: BitPlane) {
+		let screen = if plane == BitPlane::Plane1 {
+			&mut self.screen
+		} else {
+			&mut self.screen2
+		};
+		let mut flipped = 0;
+		let width = if n == 0 && self.high_res_mode == true {
+			2
+		} else {
+			1
+		};
+		let mask = if n == 0 && self.high_res_mode == true {
+			0b1000_0000_0000_0000
+		} else {
+			0b1000_0000
+		};
+		let num_rows = if n == 0 {16} else {n};
+		for row in 0..num_rows {
+			let mut row_flipped = false;
+			let address = (base_address + width*row as u16) as usize;
+			let pixels = if width == 2 {
+				((self.ram[address] as u16) << 8) + self.ram[address + 1] as u16
+			} else {
+				self.ram[address] as u16
+			};
+			for column in 0..(width * 8) {
+				if (pixels & (mask >> column)) != 0 {
+					if self.high_res_mode == true {
+						match self.variant {
+							Variant::Chip8 | Variant::SChip => {
+								let x = (x_base + column as u16) as usize;
+								let y = (y_base + row as u16) as usize;
+								let index = x + self.screen_width * y;
+								if x < self.screen_width && y < self.screen_height {
+					 				row_flipped |= screen[index];
+									screen[index] ^= true;
+								}
+							}
+							Variant::XOChip => {
+								let x = (x_base + column as u16) as usize % self.screen_width;
+								let y = (y_base + row as u16) as usize % self.screen_height;
+								let index = x + self.screen_width * y;
+					 			row_flipped |= screen[index];
+								screen[index] ^= true;
+							}
+						}
+					}
+					else if self.high_res_mode == false {
+						match self.variant {
+							Variant::Chip8 => {
+								let x = (x_base + column) as usize;
+								let y = (y_base + row as u16) as usize;
+
+								let index = x + self.screen_width * y;
+
+								if x < self.screen_width && y < self.screen_height {
+									row_flipped |= screen[index];
+									screen[index] ^= true;	
+								}
+							}
+							Variant::SChip => {
+								// 	Get the x_base and y_base again
+								// since we need to wrap around the low_res
+								// low_res dimensions
+								let x_base = x_base % ((self.screen_width / 2) as u16);
+								let y_base = y_base % ((self.screen_height / 2) as u16);
+								
+								let x = 2 * (x_base + column as u16) as usize;
+								let y = 2 * (y_base + row as u16) as usize;
+								let index = x + self.screen_width * y;
+								if x < self.screen_width && y < self.screen_height {
+									row_flipped |= screen[index];
+									screen[index] ^= true;
+									row_flipped |= screen[index+1];
+									screen[index+1] ^= true;
+									row_flipped |= screen[index+self.screen_width];
+									screen[index+self.screen_width] ^= true;
+									row_flipped |= screen[index+self.screen_width + 1];
+									screen[index+self.screen_width+1] ^= true;
+								}	
+							}
+							Variant::XOChip => {
+								// 	Get the x_base and y_base again
+								// since we need to wrap around the low_res
+								// low_res dimensions
+								let x_base = x_base % ((self.screen_width / 2) as u16);
+								let y_base = y_base % ((self.screen_height / 2) as u16);
+								
+								let x = 2 * (x_base + column as u16) as usize % self.screen_width;
+								let y = 2 * (y_base + row as u16) as usize % self.screen_height;
+								let index = x + self.screen_width * y;
+								row_flipped |= screen[index];
+								screen[index] ^= true;
+								row_flipped |= screen[index+1];
+								screen[index+1] ^= true;
+								row_flipped |= screen[index+self.screen_width];
+								screen[index+self.screen_width] ^= true;
+								row_flipped |= screen[index+self.screen_width + 1];
+								screen[index+self.screen_width+1] ^= true;
+							}
+						}
+						
+					}
+				}
+			}
+			if row_flipped {
+				flipped += 1;
+			}
+		}
+		if self.high_res_mode == true {
+			self.v_register[0xF] = flipped;
+		}
+		else {
+			if flipped > 0 {
+				self.v_register[0xF] = 1;	
+			}
+			else {
+				self.v_register[0xF] = 0;
+			}
+		}
+	}
+
+	// Helper function to scroll up a given plane
+	fn scroll_up(&mut self, n: u8, plane: BitPlane) {
+		let screen = if plane == BitPlane::Plane1 {
+			&mut self.screen
+		} else {
+			&mut self.screen2
+		};
+		let scroll_value = if self.high_res_mode == false && self.variant == Variant::XOChip {
+			2*n as usize
+		} else {
+			n as usize
+		};
+		for x in 0..self.screen_width {
+			for y in 0..self.screen_height {
+				if screen[y * self.screen_width + x] == true
+					&& y >= scroll_value {
+						screen[(y-scroll_value) * self.screen_width + x] = true;
+					}
+				screen[y * self.screen_width + x] = false;
+			}
+		}
+	}
+	
+	// Helper function to scroll down a given plane
+	fn scroll_down(&mut self, n: u8, plane: BitPlane) {
+		let screen = if plane == BitPlane::Plane1 {
+			&mut self.screen
+		} else {
+			&mut self.screen2
+		};
+		let scroll_value = if self.high_res_mode == false && self.variant == Variant::XOChip {
+			2*n as usize
+		} else {
+			n as usize
+		};
+		for x in 0..self.screen_width {
+			for y in (0..self.screen_height).rev() {
+				if screen[y * self.screen_width + x] == true
+					&& y < self.screen_height - scroll_value {
+						screen[(y+scroll_value) * self.screen_width + x] = true;
+					}
+				screen[y * self.screen_width + x] = false;
+			}
+		}
+	}
+	// Helper function to scroll right a given plane
+	fn scroll_right(&mut self, plane: BitPlane) {
+		let screen = if plane == BitPlane::Plane1 {
+			&mut self.screen
+		} else {
+			&mut self.screen2
+		};
+		let scroll_value = if self.high_res_mode == false && self.variant == Variant::XOChip {
+			8 as usize
+		} else {
+			4 as usize
+		};
+		for y in 0..self.screen_height {
+			for x in (0..self.screen_width).rev() {
+				if screen[y * self.screen_width + x] == true
+					&& x <	self.screen_width - scroll_value {
+						screen[y * self.screen_width+x+scroll_value] = true;
+					}
+				screen[y * self.screen_width + x] = false;	
+			}
+		}
+	}
+	// Helper function to scroll left a given plane
+	fn scroll_left(&mut self, plane: BitPlane) {
+		let screen = if plane == BitPlane::Plane1 {
+			&mut self.screen
+		} else {
+			&mut self.screen2
+		};
+		let scroll_value = if self.high_res_mode == false && self.variant == Variant::XOChip {
+			8 as usize
+		} else {
+			4 as usize
+		};
+		for y in 0..self.screen_height {
+			for x in 0..self.screen_width {
+				if screen[y * self.screen_width + x] == true
+					&& x >= scroll_value {
+						screen[y * self.screen_width+x-scroll_value] = true;
+					}
+				screen[y * self.screen_width + x] = false;
+			}
+		}				
+	}
+	
 	// 0000: Nop
 	fn opcode_0000(&self) {
 		return;
@@ -625,178 +850,59 @@ impl Emulator {
 	}
 
 	// DXYN: Draw sprite of N rows at coordinates V[x], V[y]
-	// TODO DXY0 ON SCHIP
 	fn opcode_dxyn(&mut self, x: u8, y: u8, n: u8) {
+		let x_base = (self.v_register[x as usize] %
+					  self.screen_width as u8) as u16;
+		let y_base = (self.v_register[y as usize] %
+					  self.screen_height as u8) as u16;
 		match self.variant {
 			Variant::Chip8 => {
 				if self.key_frame == false {
 					self.pc -= 2;
 					return;
 				}
-				let mut flipped = false;
-				// Get the base (x, y) coords
-				let x_base = (self.v_register[x as usize] %
-							  self.screen_width as u8) as u16;
-				let y_base = (self.v_register[y as usize] %
-							  self.screen_height as u8) as u16;
-
-				// The last digit determines how many rows high our sprite is
-				let num_rows = n;
-				for row in 0..num_rows {
-					// Determine which memory address our row's data is stored
-					let address = self.i_register + row as u16;
-					let pixels = self.ram[address as usize];
-					for column in 0..8 {
-						// Use a mask to fetch current pixel's bit. Only flip if a 1
-						if (pixels & (0b1000_0000 >> column)) != 0 {
-							// Sprites should wrap around screen, so apply modulo
-							let x = (x_base + column) as usize;
-							let y = (y_base + row as u16) as usize;
-
-							let index = x + self.screen_width * y;
-
-							if x < self.screen_width && y < self.screen_height {
-								flipped |= self.screen[index];
-								self.screen[index] ^= true;	
-							}
-						}
-					}
-				}
-				if flipped {
-					self.v_register[0xF] = 1;
-				}
-				else {
-					self.v_register[0xF] = 0;
-				}
+				let base_address = self.i_register;
+				self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane1);
 			}
 			Variant::SChip => {
-				let mut flipped = 0;
-				// Get the base (x, y) coords
-				let x_base = (self.v_register[x as usize] %
-							  self.screen_width as u8) as u16;
-				let y_base = (self.v_register[y as usize] %
-							  self.screen_height as u8) as u16;
-
-				if n == 0 && self.high_res_mode == true {
-					let num_rows = 16;
-					for row in 0..num_rows {
-						let mut row_flipped = false;
-						let address1 = self.i_register + 2*row as u16;
-						let address2 = self.i_register + 2*row + 1 as u16;
-						let pixels1 = self.ram[address1 as usize];
-						let pixels2 = self.ram[address2 as usize];
-						for column in 0..8  {
-							if (pixels1 as u16 & (0b1000_0000 >> column)) != 0 {
-								let x = (x_base + column) as usize;
-								let y = (y_base + row) as usize;
-								
-								let index = x + self.screen_width * y;
-								if x < self.screen_width && y < self.screen_height {
-									row_flipped |= self.screen[index];
-									self.screen[index] ^= true;
-								}
-								else {
-									// Clipping counts as a collision in SCHIP
-									// TODO: Add this as a quirk
-									// row_flipped = true;
-								}
-							}
-						}
-						for column in 0..8  {
-							if (pixels2 as u16 & (0b1000_0000 >> column)) != 0 {
-								let x = (x_base + 8 + column) as usize;
-								let y = (y_base + row) as usize;
-								let index = x + self.screen_width * y;
-								if x < self.screen_width && y < self.screen_height {
-									row_flipped |= self.screen[index];
-									self.screen[index] ^= true;
-								}
-								else {
-									// Clipping counts as a collision in SCHIP
-									// TODO: Add this as a quirk
-									// row_flipped = true;
-								}
-							}
-						}
-						if row_flipped == true {
-							flipped += 1;
-						}
-					}
-				}
-				else {
-					// DXY0 will draw 8x16 sprite (16 rows) in low_res mode
-					let num_rows = if n == 0 {16} else {n};
-					for row in 0..num_rows {
-						let mut row_flipped = false;
-						// Determine which memory address our row's data is stored
-						let address = self.i_register + row as u16;
-						let pixels = self.ram[address as usize];
-						for column in 0..8 {
-							// Use a mask to fetch current pixel's bit. Only flip if a 1
-							if (pixels as u16 & (0b1000_0000 >> column)) != 0 {
-								if self.high_res_mode == true {
-									let x = (x_base + column) as usize;
-									let y = (y_base + row as u16) as usize;
-
-									let index = x + self.screen_width * y;
-									// Clip if it exceeds screen dimensions
-									if x < self.screen_width && y < self.screen_height {
-										row_flipped |= self.screen[index];
-										self.screen[index] ^= true;
-									}
-									else {
-										// Clipping counts as a collision in SCHIP
-										// TODO: Add this as a quirk
-										// row_flipped = true;
-									}
-								}
-								else if self.high_res_mode == false {
-									// Get the x_base and y_base again
-									// since we need to wrap around the low_res
-									// low_res dimensions
-									let x_base = (self.v_register[x as usize] %
-												  (self.screen_width / 2)  as u8) as u16;
-									let y_base = (self.v_register[y as usize] %
-												  (self.screen_height / 2) as u8) as u16;
-									let x = 2 * (x_base + column) as usize;
-									let y = 2 * (y_base + row as u16) as usize;
-									let index = x + self.screen_width * y;
-									if x < self.screen_width && y < self.screen_height {
-										row_flipped |= self.screen[index];
-										self.screen[index] ^= true;
-										row_flipped |= self.screen[index+1];
-										self.screen[index+1] ^= true;
-										row_flipped |= self.screen[index+self.screen_width];
-										self.screen[index+self.screen_width] ^= true;
-										row_flipped |= self.screen[index+self.screen_width + 1];
-										self.screen[index+self.screen_width+1] ^= true;
-									}	
-								}
-							}
-						}
-						if row_flipped == true {
-							flipped += 1;
-						}
-					}
-				}
-				if self.high_res_mode == true {
-					self.v_register[0xF] = flipped;
-				}
-				else {
-					if flipped > 0 {
-						self.v_register[0xF] = 1;	
-					}
-					else {
-						self.v_register[0xF] = 0;
-					}
-					
-				}
-			}						
+				let base_address = self.i_register;
+				self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane1);
+			}
 			
-			_ => (),
+			Variant::XOChip => {
+				let mut base_address = self.i_register;
+				// match self.plane {
+				// 	BitPlane::NoPlane => println!("No Plane"),
+				// 	BitPlane::Plane1 => println!("Plane1"),
+				// 	BitPlane::Plane2 => println!("Plane2"),
+				// 	BitPlane::Both => println!("Both Planes"),
+				// }
+				match self.plane {
+					BitPlane::NoPlane => (),
+					BitPlane::Plane1 => {
+						self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane1);
+					}
+					BitPlane::Plane2 => {
+						self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane2);
+					}
+					BitPlane::Both => {
+						self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane1);
+						let width = if n == 0 && self.high_res_mode == true {
+							2
+						} else {
+							1
+						};
+						let num_rows = if n == 0 {16} else {n};
+						base_address = self.i_register + (width*num_rows as u16);
+						self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane2);
+					}
+				}
+			}
 		}
 	}
 
+
+	
 	// EX9E - Skip if key VX is pressed
 	fn opcode_ex9e(&mut self, x: u8) {
 		// EX9E - Skip if key VX is pressed
@@ -951,40 +1057,49 @@ impl Emulator {
 
 	// 00CN: Scroll display N pixels down (N/2 in low resolution mode)
 	fn opcode_00cn(&mut self, n: u8) {
-		let scroll_value = n as usize;
-		for x in 0..self.screen_width {
-			for y in (0..self.screen_height).rev() {
-				if self.screen[y * self.screen_width + x] == true
-					&& y < self.screen_height - scroll_value {
-						self.screen[(y+scroll_value) * self.screen_width + x] = true;
-					}
-				self.screen[y * self.screen_width + x] = false;
+		match self.plane {
+			BitPlane::NoPlane => (),
+			BitPlane::Plane1 => {
+				self.scroll_down(n, BitPlane::Plane1);
+			}
+			BitPlane::Plane2 => {
+				self.scroll_down(n, BitPlane::Plane2);
+			}
+			BitPlane::Both => {
+				self.scroll_down(n, BitPlane::Plane1);
+				self.scroll_down(n, BitPlane::Plane2);
 			}
 		}
 	}
 	// 00FB: Scroll display right by 4 pixels (2 in low resolution mode)
 	fn opcode_00fb(&mut self) {
-		let scroll_value = 4;
-		for y in 0..self.screen_height {
-			for x in (0..self.screen_width).rev() {
-				if self.screen[y * self.screen_width + x] == true
-					&& x <=	self.screen_width - scroll_value {
-						self.screen[y * self.screen_width+x+scroll_value] = true;
-					}
-				self.screen[y * self.screen_width + x] = false;	
+		match self.plane {
+			BitPlane::NoPlane => (),
+			BitPlane::Plane1 => {
+				self.scroll_right(BitPlane::Plane1);
+			}
+			BitPlane::Plane2 => {
+				self.scroll_right(BitPlane::Plane2);
+			}
+			BitPlane::Both => {
+				self.scroll_right(BitPlane::Plane1);
+				self.scroll_right(BitPlane::Plane2);
 			}
 		}
 	}
 	// 00FC: Scroll display left by 4 pixels (2 in low resolution mode)
 	fn opcode_00fc(&mut self) {
-		let scroll_value = 4;
-		for y in 0..self.screen_height {
-			for x in 0..self.screen_width {
-				if self.screen[y * self.screen_width + x] == true
-					&& x >= scroll_value {
-						self.screen[y * self.screen_width+x-scroll_value] = true;
-					}
-				self.screen[y * self.screen_width + x] = false;
+		match self.plane {
+			BitPlane::NoPlane => (),
+			BitPlane::Plane1 => {
+				self.scroll_left(BitPlane::Plane1);
+			}
+			BitPlane::Plane2 => {
+				self.scroll_left(BitPlane::Plane2);
+			}
+			BitPlane::Both => {
+				self.scroll_left(BitPlane::Plane1);
+				self.scroll_left(BitPlane::Plane2);
 			}
 		}				
 	}
@@ -997,32 +1112,68 @@ impl Emulator {
 
 	
 	// Opcodes for the XOChip
+	// 00DN: Scroll display up by N pixels (N/2 in low resolution mode)
+	fn opcode_00dn(&mut self, n: u8) {
+		match self.plane {
+			BitPlane::NoPlane => (),
+			BitPlane::Plane1 => {
+				self.scroll_up(n, BitPlane::Plane1);
+			}
+			BitPlane::Plane2 => {
+				self.scroll_up(n, BitPlane::Plane2);
+			}
+			BitPlane::Both => {
+				self.scroll_up(n, BitPlane::Plane1);
+				self.scroll_up(n, BitPlane::Plane2);
+			}
+		}
+	}
+	
 	// 5YX2: Save V[x] to V[y] in memory starting at I
 	fn opcode_5xy2(&mut self, x: u8, y: u8) {
 		let first_index = x as usize;
 		let last_index = y as usize;
-		for i in first_index..=last_index {
-			let ram_index = (self.i_register + i as u16) as usize;
-			self.ram[ram_index] = self.v_register[i];
+		if first_index <= last_index {
+			for i in 0..=(last_index - first_index) {
+				let ram_index = (self.i_register + i as u16) as usize;
+				self.ram[ram_index] = self.v_register[first_index + i];
+			}
 		}
+		else {
+			for i in 0..=(first_index - last_index) {
+				let ram_index = (self.i_register + i as u16) as usize;
+				self.ram[ram_index] = self.v_register[first_index - i];
+			}
+		}
+		
 	}
 	// 5YX3: Load V[x] to V[y] from memory starting at I
 	fn opcode_5xy3(&mut self, x: u8, y: u8) {
+		println!("Load from memory, x = {}, y = {}", x, y);
 		let first_index = x as usize;
 		let last_index = y as usize;
-		for i in first_index..=last_index {
-			let ram_index = (self.i_register + i as u16) as usize;
-			self.v_register[i] = self.ram[ram_index];
+		if first_index <= last_index {
+			for i in 0..=(last_index - first_index) {
+				let ram_index = (self.i_register + i as u16) as usize;
+				self.v_register[first_index + i] = self.ram[ram_index];
+			}	
 		}
+		else {
+			for i in 0..(first_index - last_index) {
+				let ram_index = (self.i_register + i as u16) as usize;
+				self.v_register[first_index - i] = self.ram[ram_index];
+			}
+		}
+		
 	}
 	// F000: Save the next 16 bits to I
 	// NOTE: This command reads 2 opcodes, so we must increment the PC again
 	fn opcode_f000(&mut self) {
-		self.pc += 2;
 		let higher_byte = self.ram[self.pc as usize] as u16;
 		let lower_byte = self.ram[(self.pc + 1) as usize] as u16;
 		let op = (higher_byte << 8) | lower_byte;
 		self.i_register = op;
+		self.pc += 2;
 	}
 	// FN01: Select drawing plane(s)
 	fn opcode_fn01(&mut self, n: u8) {
@@ -1030,8 +1181,7 @@ impl Emulator {
 			0 => self.plane = BitPlane::NoPlane,
 			1 => self.plane = BitPlane::Plane1,
 			2 => self.plane = BitPlane::Plane2,
-			3 => self.plane = BitPlane::Both,
-			_ => (),
+			_ => self.plane = BitPlane::Both,
 		}
 	}
 	// F002: Store 16 bytes in audio pattern buffer
@@ -1041,7 +1191,6 @@ impl Emulator {
 	// FX3A: Set the pitch register to V[x]
 	fn opcode_fx3a(&mut self, x: u8) {
 		let pitch = x;
-		println!("{}", pitch);
 		// TODO
 	}
 	

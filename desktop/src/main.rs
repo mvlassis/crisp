@@ -17,10 +17,10 @@ use sdl2::video::Window;
 const SCALE:u32 = 10;
 const TICKS_PER_FRAME: usize = 20;
 
-struct Settings {
-	fg_color: Color,
-	bg_color: Color,
-}
+// struct Settings {
+// 	fg_color: Color,
+// 	bg_color: Color,
+// }
 
 struct SquareWave {
 	phase_inc: f32,
@@ -72,7 +72,7 @@ fn main() {
 	let sdl_context = sdl2::init().unwrap();
 	let video_subsystem = sdl_context.video().unwrap();
 
-	let selected_variant = Variant::SChip;
+	let selected_variant = Variant::XOChip;
 	let display_wait = match selected_variant {
 		Variant::Chip8 => true,
 		_ => false,
@@ -171,16 +171,27 @@ fn draw_window(emu: &Emulator, canvas: &mut Canvas<Window>, bg_color: Color, fg_
 	canvas.set_draw_color(bg_color);
 	canvas.clear();
 
-	let screen_buffer = emu.get_display();
+	let (screen_buffer1, screen_buffer2) = emu.get_display();
 	canvas.set_draw_color(fg_color);
-	for (i, pixel) in screen_buffer.iter().enumerate() {
-		if *pixel {
-			let x = (i % screen_width) as u32;
-			let y = (i / screen_width) as u32;
-
-			let rect = Rect::new((x * SCALE) as i32, (y * SCALE) as i32, SCALE, SCALE);
-			canvas.fill_rect(rect).unwrap();
+	for (index, (pixel1, pixel2)) in (screen_buffer1.iter().zip(screen_buffer2.iter())).enumerate() {
+		let x = (index % screen_width) as u32;
+		let y = (index / screen_width) as u32;
+		let rect = Rect::new((x * SCALE) as i32, (y * SCALE) as i32, SCALE, SCALE);
+		if *pixel1 && *pixel2 {
+			let color = Color::RGB(255, 0, 0);
+			canvas.set_draw_color(color);
 		}
+		else if *pixel1 {
+			canvas.set_draw_color(fg_color);
+		}
+		else if *pixel2 {
+			let color = Color::RGB(0, 0, 255);
+			canvas.set_draw_color(color);
+		}
+		else {
+			canvas.set_draw_color(bg_color);
+		}
+		canvas.fill_rect(rect).unwrap();
 	}
 
 	canvas.present();
