@@ -15,7 +15,7 @@ use sdl2::video::Window;
 
 
 const SCALE:u32 = 10;
-const TICKS_PER_FRAME: usize = 10;
+const TICKS_PER_FRAME: usize = 20;
 
 struct Settings {
 	fg_color: Color,
@@ -157,7 +157,6 @@ fn main() {
 		}
 		chip8_emulator.tick_timers();
 		draw_window(&chip8_emulator, &mut canvas, bg_color, fg_color, screen_width);
-		//audio_device.lock();
 		if chip8_emulator.beep {
 			audio_device.resume();
 		} else {
