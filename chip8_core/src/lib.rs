@@ -7,6 +7,8 @@ const NUM_REGISTERS: usize = 16;
 const STACK_SIZE: usize = 16;
 const NUM_KEYS: usize = 16;
 
+const PATTERN_BUFFER_SIZE: usize = 16;
+
 // 80 bytes for the standard font
 const FONTSET_SIZE: usize = 80;
 const FONTSET: [u8; FONTSET_SIZE] = [
@@ -71,6 +73,9 @@ pub struct Emulator {
 	next_opcode_double: bool,
 	screen2: Vec<bool>,
 	plane: BitPlane,
+	pub pattern_buffer: [u8; PATTERN_BUFFER_SIZE],
+	pub pattern_changed: bool,
+	pitch: u8,
 }
 
 const START_ADDRESS: u16 = 0x200;
@@ -130,6 +135,9 @@ impl Emulator {
 			next_opcode_double: false,
 			screen2: vec![false; width * height],
 			plane: BitPlane::Plane1,
+			pattern_buffer: [0; PATTERN_BUFFER_SIZE],
+			pattern_changed: false,
+			pitch: 64,
 		};
 
 		new_emulator.ram[..FONTSET_SIZE].copy_from_slice(&FONTSET);
@@ -171,6 +179,8 @@ impl Emulator {
 		self.next_opcode_double = false;
 		self.screen = vec![false; self.screen_width * self.screen_height];
 		self.plane = BitPlane::Plane1;
+		self.pattern_buffer = [0; PATTERN_BUFFER_SIZE];
+		self.pitch = 64;
 	}
 	
 	pub fn tick(&mut self, key_frame: bool) {
@@ -621,6 +631,11 @@ impl Emulator {
 			}
 		}				
 	}
+
+	// Convert the pitch register to the actual frequency we will use for audio
+	fn get_sound_frequency(&self) -> f64 {
+		return 4000.0 * 2_i32.pow(((self.pitch - 64)/48) as u32) as f64;
+	}
 	
 	// 0000: Nop
 	fn opcode_0000(&self) {
@@ -961,6 +976,7 @@ impl Emulator {
 	fn opcode_fx18(&mut self, x: u8) {
 		let index = x as usize;
 		self.sound_timer = self.v_register[index];
+		println!("Timer: {}", self.sound_timer);
 	}
 	// FX1E: Add V[x] to the memory pointer I
 	fn opcode_fx1e(&mut self, x: u8) {
@@ -1149,7 +1165,6 @@ impl Emulator {
 	}
 	// 5YX3: Load V[x] to V[y] from memory starting at I
 	fn opcode_5xy3(&mut self, x: u8, y: u8) {
-		println!("Load from memory, x = {}, y = {}", x, y);
 		let first_index = x as usize;
 		let last_index = y as usize;
 		if first_index <= last_index {
@@ -1186,12 +1201,20 @@ impl Emulator {
 	}
 	// F002: Store 16 bytes in audio pattern buffer
 	fn opcode_f002(&mut self) {
-		// TODO
+		println!("Pattern buffer");
+		for i in 0..16 {
+			self.pattern_buffer[i] = self.ram[self.i_register as usize + i];
+		}
+		// for i in 0..16 {
+		// 	println!("{:#04x}", self.pattern_buffer[i]);
+		// }
+		self.pattern_changed = true;
 	}
+	
 	// FX3A: Set the pitch register to V[x]
 	fn opcode_fx3a(&mut self, x: u8) {
-		let pitch = x;
-		// TODO
+		println!("Pitch!");
+		self.pitch = x;
 	}
 	
 	pub fn tick_timers(&mut self) {
@@ -1202,10 +1225,9 @@ impl Emulator {
 		if self.sound_timer > 0 {
 			self.sound_timer -= 1;
 			self.beep = true;
-
-			if self.sound_timer == 0 {
-				self.beep = false;
-			}
+		}
+		else {
+			self.beep = false;
 		}
 	}
 
