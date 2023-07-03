@@ -57,7 +57,7 @@ fn new_audio_device(audio_subsystem: &AudioSubsystem, buffer: [u8; 16]) -> Audio
 		channels: Some(1), // mono
 		samples: Some(4),
 	};
-	let audio_device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
+	let audio_device = audio_subsystem.open_playback(None, &desired_spec, |_| {
 		SquareWave {
 			buffer_pointer: 0,
 			pattern_buffer: buffer,

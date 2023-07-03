@@ -328,7 +328,6 @@ impl Emulator {
 			(0xC, _, _, _) => self.opcode_cxnn(digit2, op & 0xFF),
 			
 			// DXYN: Draw sprite of N rows at coordinates V[x], V[y]
-			// TODO DXY0 ON SCHIP
 			(0xD, _, _, _) => self.opcode_dxyn(digit2, digit3, digit4),
 			
 			// EX9E - Skip if key VX is pressed
@@ -426,12 +425,12 @@ impl Emulator {
 			&mut self.screen2
 		};
 		let mut flipped = 0;
-		let width = if n == 0 && self.high_res_mode == true {
+		let width = if n == 0 {
 			2
 		} else {
 			1
 		};
-		let mask = if n == 0 && self.high_res_mode == true {
+		let mask = if n == 0 {
 			0b1000_0000_0000_0000
 		} else {
 			0b1000_0000
@@ -976,7 +975,7 @@ impl Emulator {
 	fn opcode_fx18(&mut self, x: u8) {
 		let index = x as usize;
 		self.sound_timer = self.v_register[index];
-		println!("Timer: {}", self.sound_timer);
+		// println!("Timer: {}", self.sound_timer);
 	}
 	// FX1E: Add V[x] to the memory pointer I
 	fn opcode_fx1e(&mut self, x: u8) {
@@ -1201,7 +1200,7 @@ impl Emulator {
 	}
 	// F002: Store 16 bytes in audio pattern buffer
 	fn opcode_f002(&mut self) {
-		println!("Pattern buffer");
+		// println!("Pattern buffer");
 		for i in 0..16 {
 			self.pattern_buffer[i] = self.ram[self.i_register as usize + i];
 		}
