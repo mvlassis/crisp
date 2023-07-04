@@ -1,12 +1,11 @@
-use chip8_core::*;
-use config::Config;
 use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::time::Duration;
+// use std::time::Instant;
 
-use sdl2::audio::{AudioCallback, AudioSpecDesired, AudioDevice};
-use sdl2::AudioSubsystem;
+use config::Config;
+
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::Canvas;
@@ -14,57 +13,17 @@ use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::video::Window;
 
+mod audio_driver;
+use audio_driver::AudioDriver;
+use chip8_core::*;
 
-const SCALE:u32 = 10;
+const SCALE:u32 = 10; // The amount by which we scale the display
 const TICKS_PER_FRAME: usize = 500;
 
 // struct Settings {
 // 	fg_color: Color,
 // 	bg_color: Color,
 // }
-
-struct SquareWave {
-	buffer_pointer: usize,
-	pattern_buffer: [u8; 16],
-}
-
-impl AudioCallback for SquareWave {
-	type Channel = u8;
-
-	fn callback(&mut self, out: &mut [u8]) {
-		for i in 0..out.len() {
-			// println!("{}", i);
-			let next_byte = self.pattern_buffer[self.buffer_pointer/8];
-			out[i] = next_byte;
-			out[i] <<= self.buffer_pointer % 8;
-			out[i] &= 0x80;
-			// println!("{}", out[i]);
-			if out[i] > 0 {
-				out[i] = 255;
-			}
-
-			self.buffer_pointer += 1;
-			if self.buffer_pointer >= 16 * 8 {
-				self.buffer_pointer = 0;
-			}
-		}
-	}
-}
-
-fn new_audio_device(audio_subsystem: &AudioSubsystem, buffer: [u8; 16]) -> AudioDevice<SquareWave>{
-	let desired_spec = AudioSpecDesired {
-		freq: Some(4000),
-		channels: Some(1), // mono
-		samples: Some(4),
-	};
-	let audio_device = audio_subsystem.open_playback(None, &desired_spec, |_| {
-		SquareWave {
-			buffer_pointer: 0,
-			pattern_buffer: buffer,
-		}
-	}).unwrap();
-	audio_device
-}
 
 fn main() {
 	let args: Vec<_> = env::args().collect();
@@ -120,8 +79,6 @@ fn main() {
 	canvas.clear();
 	canvas.present();
 
-
-
 	let mut event_pump = sdl_context.event_pump().unwrap();
 
 	let mut chip8_emulator = Emulator::new(selected_variant);
@@ -130,11 +87,10 @@ fn main() {
 	rom.read_to_end(&mut buffer).unwrap();
 	chip8_emulator.load(&buffer);
 
-	let mut play_sound = false;
 	let audio_subsystem = sdl_context.audio().unwrap();
-	
 	let buffer_copy = chip8_emulator.pattern_buffer.to_owned();
-	let mut audio_device = new_audio_device(&audio_subsystem, buffer_copy);
+	let mut audio_driver = AudioDriver::new(&audio_subsystem, buffer_copy, chip8_emulator.get_sound_frequency());
+	
 	
 	'running: loop {
 		for event in event_pump.poll_iter() {
@@ -174,21 +130,17 @@ fn main() {
 
 		chip8_emulator.tick_timers();
 		draw_window(&chip8_emulator, &mut canvas, bg_color, fg_color, screen_width);
-		if chip8_emulator.pattern_changed {
-			chip8_emulator.pattern_changed = false;
-			let buffer_copy = chip8_emulator.pattern_buffer.to_owned();
-			//audio_device.pause();
-			let mut lock_guard = audio_device.lock();
-			lock_guard.pattern_buffer = buffer_copy;
-			drop(lock_guard);
+
+		if chip8_emulator.get_sound_frequency() != audio_driver.frequency {
+			audio_driver.update_frequency(&audio_subsystem, chip8_emulator.get_sound_frequency());
 		}
-		if !play_sound && chip8_emulator.beep {
-			play_sound = true;
-			audio_device.resume();
-		} else if play_sound && !chip8_emulator.beep {
-			play_sound = false;
-			audio_device.pause();
+
+		let buffer_copy = chip8_emulator.pattern_buffer.to_owned();
+		if buffer_copy != audio_driver.pattern_buffer {
+			audio_driver.update_pattern_buffer(buffer_copy);
 		}
+		
+		audio_driver.handle_audio(chip8_emulator.beep);
 		::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
 	}
 }

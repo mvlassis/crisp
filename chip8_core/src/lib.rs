@@ -1,3 +1,5 @@
+mod emu_config; // Holds configuration values for the emulator
+
 use rand::Rng;
 
 const RAM_SIZE: usize = 4096;
@@ -7,7 +9,8 @@ const NUM_REGISTERS: usize = 16;
 const STACK_SIZE: usize = 16;
 const NUM_KEYS: usize = 16;
 
-const PATTERN_BUFFER_SIZE: usize = 16;
+pub const PATTERN_BUFFER_SIZE: usize = 16;
+const DEFAULT_PITCH: u8 = 64;
 
 // 80 bytes for the standard font
 const FONTSET_SIZE: usize = 80;
@@ -52,14 +55,14 @@ pub struct Emulator {
 	screen: Vec<bool>,
 	// FYI: v stands for "variable"
 	v_register: [u8; NUM_REGISTERS],
-	// The I register only needs 12 bits
+	// The I register only needs 12 bits, so it's a bit overkill
 	i_register: u16,
 	stack_pointer: i16,
 	stack: [u16; STACK_SIZE],
 	keys: [bool; NUM_KEYS],
 	delay_timer: u8,
 	sound_timer: u8,
-	pub beep: bool,
+	pub beep: bool, // True if the system should emit sound
 	variant: Variant,
 	screen_width: usize,
 	screen_height: usize,
@@ -71,15 +74,16 @@ pub struct Emulator {
 
 	// Needed for the XOChip variant
 	next_opcode_double: bool,
-	screen2: Vec<bool>,
+	screen2: Vec<bool>, // Second plane that allows us to display 2 more colors
 	plane: BitPlane,
 	pub pattern_buffer: [u8; PATTERN_BUFFER_SIZE],
-	pub pattern_changed: bool,
-	pitch: u8,
+	pub pitch: u8,
 }
 
+// Loading ROMs into RAM starts from this address
 const START_ADDRESS: u16 = 0x200;
 
+// Simple enum that shows what variant we should use for the emulation
 #[derive(PartialEq)]
 pub enum Variant {
 	Chip8,
@@ -136,8 +140,7 @@ impl Emulator {
 			screen2: vec![false; width * height],
 			plane: BitPlane::Plane1,
 			pattern_buffer: [0; PATTERN_BUFFER_SIZE],
-			pattern_changed: false,
-			pitch: 64,
+			pitch: DEFAULT_PITCH,
 		};
 
 		new_emulator.ram[..FONTSET_SIZE].copy_from_slice(&FONTSET);
@@ -146,17 +149,23 @@ impl Emulator {
 		);
 		new_emulator
 	}
-	
-	fn push(&mut self, value: u16) {
-		self.stack_pointer += 1;
-		self.stack[self.stack_pointer as usize] = value;
-	}		
-	
-	fn pop(&mut self) -> u16 {
-		self.stack_pointer -= 1;
-		self.stack[(self.stack_pointer + 1) as usize]
+
+	// Decrement the delay and sound timers by 1
+	pub fn tick_timers(&mut self) {
+		if self.delay_timer > 0 {
+			self.delay_timer -= 1;
+		}
+
+		if self.sound_timer > 0 {
+			self.sound_timer -= 1;
+			self.beep = true;
+		}
+		else {
+			self.beep = false;
+		}
 	}
 
+	// Resets all fields (you'll probably need to reload the ROM as well)
 	pub fn reset(&mut self) {
 		self.pc = START_ADDRESS;
 		self.ram = vec![0; self.ram_size];
@@ -180,7 +189,7 @@ impl Emulator {
 		self.screen = vec![false; self.screen_width * self.screen_height];
 		self.plane = BitPlane::Plane1;
 		self.pattern_buffer = [0; PATTERN_BUFFER_SIZE];
-		self.pitch = 64;
+		self.pitch = DEFAULT_PITCH;
 	}
 	
 	pub fn tick(&mut self, key_frame: bool) {
@@ -203,6 +212,18 @@ impl Emulator {
 		let start = START_ADDRESS as usize;
 		let end = start + data.len();
 		self.ram[start..end].copy_from_slice(data);
+	}
+
+	// Push a value to the stack
+	fn push(&mut self, value: u16) {
+		self.stack_pointer += 1;
+		self.stack[self.stack_pointer as usize] = value;
+	}		
+
+	// Pop a value from the stack
+	fn pop(&mut self) -> u16 {
+		self.stack_pointer -= 1;
+		self.stack[(self.stack_pointer + 1) as usize]
 	}
 	
 	fn fetch(&mut self) -> u16 {
@@ -248,8 +269,10 @@ impl Emulator {
 			},
 		}
 	}
-	
-	fn execute(&mut self, op:u16) {
+
+	// Read to opcode and execute the relative command
+	fn execute(&mut self, op: u16) {
+		// Big-endian system, so the first we digit we read is digit1
 		let digit1 = ((op & 0xF000) >> 12) as u8;
 		let digit2 = ((op & 0x0F00) >> 8) as u8;
 		let digit3 = ((op & 0x00F0) >> 4) as u8;
@@ -608,6 +631,7 @@ impl Emulator {
 			}
 		}
 	}
+	
 	// Helper function to scroll left a given plane
 	fn scroll_left(&mut self, plane: BitPlane) {
 		let screen = if plane == BitPlane::Plane1 {
@@ -632,8 +656,8 @@ impl Emulator {
 	}
 
 	// Convert the pitch register to the actual frequency we will use for audio
-	fn get_sound_frequency(&self) -> f64 {
-		return 4000.0 * 2_i32.pow(((self.pitch - 64)/48) as u32) as f64;
+	pub fn get_sound_frequency(&self) -> i32 {
+		return (4000.0 * 2_i32.pow(((self.pitch - 64)/48) as u32) as f64) as i32;
 	}
 	
 	// 0000: Nop
@@ -885,12 +909,6 @@ impl Emulator {
 			
 			Variant::XOChip => {
 				let mut base_address = self.i_register;
-				// match self.plane {
-				// 	BitPlane::NoPlane => println!("No Plane"),
-				// 	BitPlane::Plane1 => println!("Plane1"),
-				// 	BitPlane::Plane2 => println!("Plane2"),
-				// 	BitPlane::Both => println!("Both Planes"),
-				// }
 				match self.plane {
 					BitPlane::NoPlane => (),
 					BitPlane::Plane1 => {
@@ -907,6 +925,7 @@ impl Emulator {
 							1
 						};
 						let num_rows = if n == 0 {16} else {n};
+						// Move the address by the total number of bytes we used
 						base_address = self.i_register + (width*num_rows as u16);
 						self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane2);
 					}
@@ -975,7 +994,6 @@ impl Emulator {
 	fn opcode_fx18(&mut self, x: u8) {
 		let index = x as usize;
 		self.sound_timer = self.v_register[index];
-		// println!("Timer: {}", self.sound_timer);
 	}
 	// FX1E: Add V[x] to the memory pointer I
 	fn opcode_fx1e(&mut self, x: u8) {
@@ -1200,14 +1218,9 @@ impl Emulator {
 	}
 	// F002: Store 16 bytes in audio pattern buffer
 	fn opcode_f002(&mut self) {
-		// println!("Pattern buffer");
 		for i in 0..16 {
 			self.pattern_buffer[i] = self.ram[self.i_register as usize + i];
 		}
-		// for i in 0..16 {
-		// 	println!("{:#04x}", self.pattern_buffer[i]);
-		// }
-		self.pattern_changed = true;
 	}
 	
 	// FX3A: Set the pitch register to V[x]
@@ -1216,19 +1229,5 @@ impl Emulator {
 		self.pitch = x;
 	}
 	
-	pub fn tick_timers(&mut self) {
-		if self.delay_timer > 0 {
-			self.delay_timer -= 1;
-		}
-
-		if self.sound_timer > 0 {
-			self.sound_timer -= 1;
-			self.beep = true;
-		}
-		else {
-			self.beep = false;
-		}
-	}
-
 }
 
