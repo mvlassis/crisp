@@ -1,5 +1,3 @@
-mod emu_config; // Holds configuration values for the emulator
-
 use rand::Rng;
 
 const RAM_SIZE: usize = 4096;
@@ -48,7 +46,37 @@ const FONTSET_BIG: [u8; FONTSET_BIG_SIZE] = [
     0x3C, 0x7E, 0xC3, 0xC3, 0x7F, 0x3F, 0x03, 0x03, 0x3E, 0x7C, // 9
 ];
 
+// Simple enum that shows what variant we should use for the emulation
+#[derive(Copy, Clone, PartialEq)]
+pub enum Variant {
+	Chip8,
+	SChip,
+	XOChip,
+}
+
+// Struct that holds all information about the emulator created
+#[derive(Copy, Clone)]
+pub struct EmuConfig {
+	pub variant: Variant,
+	
+	pub quirk_vfreset: bool,
+	pub quirk_memory: bool,
+	pub quirk_clipping: bool,
+	pub quirk_shifting: bool,
+	pub quirk_jumping: bool,
+}
+
+#[derive(Copy, Clone, PartialEq)]
+pub enum BitPlane {
+	NoPlane,
+	Plane1,
+	Plane2,
+	Both,
+}
+
 pub struct Emulator {
+	config: EmuConfig,
+	
 	pc: u16,
 	ram_size: usize,
 	ram: Vec<u8>,
@@ -63,7 +91,6 @@ pub struct Emulator {
 	delay_timer: u8,
 	sound_timer: u8,
 	pub beep: bool, // True if the system should emit sound
-	variant: Variant,
 	screen_width: usize,
 	screen_height: usize,
 	key_frame: bool,
@@ -83,39 +110,26 @@ pub struct Emulator {
 // Loading ROMs into RAM starts from this address
 const START_ADDRESS: u16 = 0x200;
 
-// Simple enum that shows what variant we should use for the emulation
-#[derive(PartialEq)]
-pub enum Variant {
-	Chip8,
-	SChip,
-	XOChip,
-}
-
-#[derive(Copy, Clone, PartialEq)]
-pub enum BitPlane {
-	NoPlane,
-	Plane1,
-	Plane2,
-	Both,
-}
 
 impl Emulator {
-	pub fn new(selected_variant: Variant) -> Self {
-		let width = match selected_variant {
+	pub fn new(given_config: &EmuConfig) -> Self {
+		let width = match given_config.variant {
 			Variant::Chip8 => 64,
 			Variant::SChip => 128,
 			Variant::XOChip => 128,
 		};
-		let height = match selected_variant {
+		let height = match given_config.variant {
 			Variant::Chip8 => 32,
 			Variant::SChip => 64,
 			Variant::XOChip => 64,
 		};
-		let platform_ram_size = match selected_variant {
+		let platform_ram_size = match given_config.variant {
 			Variant::Chip8 | Variant::SChip => RAM_SIZE,
 			Variant::XOChip => RAM_SIZE_XO,
 		};
 		let mut new_emulator = Self {
+			config: given_config.clone(),
+			
 			pc: START_ADDRESS,
 			ram_size: platform_ram_size,
 			ram: vec![0; platform_ram_size],
@@ -128,7 +142,6 @@ impl Emulator {
 			delay_timer: 0,
 			sound_timer: 0,
 			beep: false,
-			variant: selected_variant,
 			screen_width: width,
 			screen_height: height,
 			key_frame: true,
@@ -157,6 +170,7 @@ impl Emulator {
 		}
 
 		if self.sound_timer > 0 {
+			println!("SOUND TIMER = {}", self.sound_timer);
 			self.sound_timer -= 1;
 			self.beep = true;
 		}
@@ -200,7 +214,8 @@ impl Emulator {
 		self.execute(op);
 	}
 
-	pub fn get_display(&self) -> (&[bool], &[bool]){
+	// Return the 2 screen buffers
+	pub fn get_screen_buffers(&self) -> (&[bool], &[bool]){
 		(&self.screen, &self.screen2)
 	}
 
@@ -470,7 +485,7 @@ impl Emulator {
 			for column in 0..(width * 8) {
 				if (pixels & (mask >> column)) != 0 {
 					if self.high_res_mode == true {
-						match self.variant {
+						match self.config.variant {
 							Variant::Chip8 | Variant::SChip => {
 								let x = (x_base + column as u16) as usize;
 								let y = (y_base + row as u16) as usize;
@@ -490,7 +505,7 @@ impl Emulator {
 						}
 					}
 					else if self.high_res_mode == false {
-						match self.variant {
+						match self.config.variant {
 							Variant::Chip8 => {
 								let x = (x_base + column) as usize;
 								let y = (y_base + row as u16) as usize;
@@ -571,7 +586,7 @@ impl Emulator {
 		} else {
 			&mut self.screen2
 		};
-		let scroll_value = if self.high_res_mode == false && self.variant == Variant::XOChip {
+		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
 			2*n as usize
 		} else {
 			n as usize
@@ -594,7 +609,7 @@ impl Emulator {
 		} else {
 			&mut self.screen2
 		};
-		let scroll_value = if self.high_res_mode == false && self.variant == Variant::XOChip {
+		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
 			2*n as usize
 		} else {
 			n as usize
@@ -616,7 +631,7 @@ impl Emulator {
 		} else {
 			&mut self.screen2
 		};
-		let scroll_value = if self.high_res_mode == false && self.variant == Variant::XOChip {
+		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
 			8 as usize
 		} else {
 			4 as usize
@@ -639,7 +654,7 @@ impl Emulator {
 		} else {
 			&mut self.screen2
 		};
-		let scroll_value = if self.high_res_mode == false && self.variant == Variant::XOChip {
+		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
 			8 as usize
 		} else {
 			4 as usize
@@ -752,7 +767,7 @@ impl Emulator {
 		let v_index1 = x as usize;
 		let v_index2 = y as usize;
 		self.v_register[v_index1] = self.v_register[v_index1] | self.v_register[v_index2];
-		match self.variant {
+		match self.config.variant {
 			Variant::Chip8 => self.v_register[0xF] = 0,
 			Variant::SChip | Variant::XOChip => (),
 		}
@@ -763,7 +778,7 @@ impl Emulator {
 		let v_index1 = x as usize;
 		let v_index2 = y as usize;
 		self.v_register[v_index1] = self.v_register[v_index1] & self.v_register[v_index2];
-		match self.variant {
+		match self.config.variant {
 			Variant::Chip8 => self.v_register[0xF] = 0,
 			Variant::SChip | Variant::XOChip => (),
 		}
@@ -774,7 +789,7 @@ impl Emulator {
 		let v_index1 = x as usize;
 		let v_index2 = y as usize;
 		self.v_register[v_index1] = self.v_register[v_index1] ^ self.v_register[v_index2];
-		match self.variant {
+		match self.config.variant {
 			Variant::Chip8 => self.v_register[0xF] = 0,
 			_ => (),
 		}
@@ -813,7 +828,7 @@ impl Emulator {
 		let index1 = x as usize;
 		let index2 = y as usize;
 		// TODO: QUIRK OPTION
-		match self.variant {
+		match self.config.variant {
 			Variant::Chip8 => self.v_register[index1] = self.v_register[index2],
 			Variant::SChip => (),
 			Variant::XOChip => self.v_register[index1] = self.v_register[index2],
@@ -840,7 +855,7 @@ impl Emulator {
 	fn opcode_8xye(&mut self, x: u8, y: u8) {
 		let index1 = x as usize;
 		let index2 = y as usize;
-		match self.variant {
+		match self.config.variant {
 			Variant::Chip8 => self.v_register[index1] = self.v_register[index2],
 			Variant::SChip => (),
 			Variant::XOChip => self.v_register[index1] = self.v_register[index2],
@@ -871,7 +886,7 @@ impl Emulator {
 	// BMMM: Jump to MMM + V[0]
 	fn opcode_bmmm(&mut self, mmm:u16, digit2: u8) {
 		let address = mmm;
-		let index = match self.variant {
+		let index = match self.config.variant {
 			Variant::Chip8 => 0,
 			Variant::SChip => digit2 as usize,
 			Variant::XOChip => 0,
@@ -893,7 +908,7 @@ impl Emulator {
 					  self.screen_width as u8) as u16;
 		let y_base = (self.v_register[y as usize] %
 					  self.screen_height as u8) as u16;
-		match self.variant {
+		match self.config.variant {
 			Variant::Chip8 => {
 				if self.key_frame == false {
 					self.pc -= 2;
@@ -1026,7 +1041,7 @@ impl Emulator {
 			let ram_index = (self.i_register + i as u16) as usize;
 			self.ram[ram_index] = self.v_register[i];
 		}
-		match self.variant {
+		match self.config.variant {
 			Variant::Chip8 => {
 				self.i_register = self.i_register + last_index as u16 + 1;		
 			}
@@ -1043,7 +1058,7 @@ impl Emulator {
 			let ram_index = (self.i_register + i as u16) as usize;
 			self.v_register[i] = self.ram[ram_index];
 		}
-		match self.variant {
+		match self.config.variant {
 			Variant::Chip8 => {
 				self.i_register = self.i_register + last_index as u16 + 1;		
 			}
@@ -1063,7 +1078,7 @@ impl Emulator {
 	// 00FE: Disable high-resolution mode
 	fn opcode_00fe(&mut self) {
 		self.high_res_mode = false;
-		if self.variant == Variant::XOChip {
+		if self.config.variant == Variant::XOChip {
 			self.clear_screen(&BitPlane::Both);
 		}
 		
@@ -1071,7 +1086,7 @@ impl Emulator {
 	// 00FF: Enable high-resolution mode
 	fn opcode_00ff(&mut self) {
 		self.high_res_mode = true;
-		if self.variant == Variant::XOChip {
+		if self.config.variant == Variant::XOChip {
 			self.clear_screen(&BitPlane::Both);	
 		}
 		
@@ -1221,6 +1236,9 @@ impl Emulator {
 		for i in 0..16 {
 			self.pattern_buffer[i] = self.ram[self.i_register as usize + i];
 		}
+		// for i in 0..16 {
+		// 	println!("{:#04}", self.pattern_buffer[i]);
+		// }
 	}
 	
 	// FX3A: Set the pitch register to V[x]

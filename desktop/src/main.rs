@@ -1,36 +1,28 @@
-use std::env;
+mod video_driver;
+mod audio_driver;
+mod cli;
+
 use std::fs::File;
 use std::io::Read;
 use std::time::Duration;
 // use std::time::Instant;
 
+use clap::Parser;
 use config::Config;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::render::Canvas;
 use sdl2::pixels::Color;
-use sdl2::rect::Rect;
-use sdl2::video::Window;
 
-mod audio_driver;
+use spin_sleep; // More accurate than thread::spin_sleep
+
 use audio_driver::AudioDriver;
+use video_driver::VideoDriver;
+use video_driver::VideoConfig;
 use chip8_core::*;
 
-const SCALE:u32 = 10; // The amount by which we scale the display
-const TICKS_PER_FRAME: usize = 500;
-
-// struct Settings {
-// 	fg_color: Color,
-// 	bg_color: Color,
-// }
-
 fn main() {
-	let args: Vec<_> = env::args().collect();
-	if args.len() != 2 {
-		println!("Usage: cargo run <path/to/game>");
-		return
-	}
+	let args = cli::Args::parse();
 
 	let config = Config::builder()
 		.add_source(config::File::with_name("config.toml"))
@@ -54,7 +46,8 @@ fn main() {
 	let sdl_context = sdl2::init().unwrap();
 	let video_subsystem = sdl_context.video().unwrap();
 
-	let selected_variant = Variant::XOChip;
+	let selected_variant = args.get_variant();
+	
 	let display_wait = match selected_variant {
 		Variant::Chip8 => true,
 		_ => false,
@@ -69,30 +62,36 @@ fn main() {
 		Variant::SChip => 64,
 		Variant::XOChip => 64,
 	};			
-	let window_width = (screen_width as u32) * SCALE;
-	let window_height = (screen_height as u32) * SCALE;
-		
-	let window = video_subsystem.window("CHIP-8 Emulator", window_width, window_height)
-		.position_centered().opengl().build().unwrap();
+
+	let video_config = VideoConfig {
+		scale: args.scale as u32,
+		color0: bg_color,
+		color1: fg_color,
+		color2: Color::RGB(0, 0, 255),
+		color3: Color::RGB(255, 0, 0),
+	};
+	let mut video_driver = VideoDriver::new(&video_subsystem, screen_width, screen_height, video_config);
+
+	let emu_config = args.get_emuconfig();
 	
-	let mut canvas = window.into_canvas().present_vsync().build().unwrap();
-	canvas.clear();
-	canvas.present();
-
-	let mut event_pump = sdl_context.event_pump().unwrap();
-
-	let mut chip8_emulator = Emulator::new(selected_variant);
-	let mut rom = File::open(&args[1]).expect("Unable to open file");
+	let mut chip8_emulator = Emulator::new(&emu_config);
+	
+	let mut rom = File::open(&args.file_name).expect("Unable to open file");
 	let mut buffer = Vec::new();
 	rom.read_to_end(&mut buffer).unwrap();
 	chip8_emulator.load(&buffer);
 
+	
 	let audio_subsystem = sdl_context.audio().unwrap();
-	let buffer_copy = chip8_emulator.pattern_buffer.to_owned();
-	let mut audio_driver = AudioDriver::new(&audio_subsystem, buffer_copy, chip8_emulator.get_sound_frequency());
-	
-	
+	let pattern_buffer_copy = chip8_emulator.pattern_buffer.to_owned();
+	let mut audio_driver = AudioDriver::new(&audio_subsystem, &selected_variant, pattern_buffer_copy, chip8_emulator.get_sound_frequency());
+
+	// Used for the FPS counter
+	let timer_subsystem = sdl_context.timer().unwrap();
+
+	let mut event_pump = sdl_context.event_pump().unwrap();
 	'running: loop {
+		let start: u64 = timer_subsystem.performance_counter();
 		for event in event_pump.poll_iter() {
 			match event {
 				Event::Quit {..} |
@@ -116,7 +115,7 @@ fn main() {
 				_ => ()
 			}
 		}
-		for i in 0..TICKS_PER_FRAME {
+		for i in 0..args.ticks_per_frame {
 			if display_wait {
 				match i {
 					0 => chip8_emulator.tick(true),
@@ -129,51 +128,36 @@ fn main() {
 		}
 
 		chip8_emulator.tick_timers();
-		draw_window(&chip8_emulator, &mut canvas, bg_color, fg_color, screen_width);
+		audio_driver.handle_audio(chip8_emulator.beep);
+		
+		let screen_buffers = chip8_emulator.get_screen_buffers();
+		video_driver.draw_window(screen_buffers);
 
 		if chip8_emulator.get_sound_frequency() != audio_driver.frequency {
 			audio_driver.update_frequency(&audio_subsystem, chip8_emulator.get_sound_frequency());
 		}
 
-		let buffer_copy = chip8_emulator.pattern_buffer.to_owned();
-		if buffer_copy != audio_driver.pattern_buffer {
-			audio_driver.update_pattern_buffer(buffer_copy);
+		let pattern_buffer_copy = chip8_emulator.pattern_buffer.to_owned();
+		if pattern_buffer_copy != audio_driver.pattern_buffer {
+			audio_driver.update_pattern_buffer(pattern_buffer_copy);
 		}
 		
-		audio_driver.handle_audio(chip8_emulator.beep);
-		::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+		let end: u64 = timer_subsystem.performance_counter();
+		let seconds: f64 = (end - start) as f64 / timer_subsystem.performance_frequency() as f64;
+
+		let time_delay = (1_000_000_000u64 / 60) - (seconds * 1_000_000_000f64) as u64;
+		if args.vsync {
+			spin_sleep::sleep(Duration::new(0, time_delay as u32));
+		}
+
+		let end: u64 = timer_subsystem.performance_counter();
+		let seconds: f64 = (end - start) as f64 / timer_subsystem.performance_frequency() as f64;
+		let current_fps = 1.0 / seconds;
+		// if current_fps < 59.5a {
+		// 	println!("FPS: {}", current_fps);
+		// }
+		println!("FPS: {}", current_fps);
 	}
-}
-
-fn draw_window(emu: &Emulator, canvas: &mut Canvas<Window>, bg_color: Color, fg_color: Color, screen_width: usize) {
-
-	canvas.set_draw_color(bg_color);
-	canvas.clear();
-
-	let (screen_buffer1, screen_buffer2) = emu.get_display();
-	canvas.set_draw_color(fg_color);
-	for (index, (pixel1, pixel2)) in (screen_buffer1.iter().zip(screen_buffer2.iter())).enumerate() {
-		let x = (index % screen_width) as u32;
-		let y = (index / screen_width) as u32;
-		let rect = Rect::new((x * SCALE) as i32, (y * SCALE) as i32, SCALE, SCALE);
-		if *pixel1 && *pixel2 {
-			let color = Color::RGB(255, 0, 0);
-			canvas.set_draw_color(color);
-		}
-		else if *pixel1 {
-			canvas.set_draw_color(fg_color);
-		}
-		else if *pixel2 {
-			let color = Color::RGB(0, 0, 255);
-			canvas.set_draw_color(color);
-		}
-		else {
-			canvas.set_draw_color(bg_color);
-		}
-		canvas.fill_rect(rect).unwrap();
-	}
-
-	canvas.present();
 }
 
 fn key2button(key: Keycode) -> Option<usize> {
