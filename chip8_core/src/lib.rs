@@ -59,8 +59,9 @@ pub enum Variant {
 pub struct EmuConfig {
 	pub variant: Variant,
 	
-	pub quirk_vfreset: bool,
+	pub quirk_vfreset: bool, // 8xy1, 8xy2, 8xy3 reset register flags to 0
 	pub quirk_memory: bool,
+	pub quirk_displaywait: bool,
 	pub quirk_clipping: bool,
 	pub quirk_shifting: bool,
 	pub quirk_jumping: bool,
@@ -170,7 +171,6 @@ impl Emulator {
 		}
 
 		if self.sound_timer > 0 {
-			println!("SOUND TIMER = {}", self.sound_timer);
 			self.sound_timer -= 1;
 			self.beep = true;
 		}
@@ -456,6 +456,7 @@ impl Emulator {
 		}
 	}
 
+	// Draws sprites on the screen by writing bits on the screen buffers
 	fn draw_sprite(&mut self, x_base: u16, y_base: u16, n: u8, base_address: u16, plane: BitPlane) {
 		let screen = if plane == BitPlane::Plane1 {
 			&mut self.screen
@@ -485,49 +486,71 @@ impl Emulator {
 			for column in 0..(width * 8) {
 				if (pixels & (mask >> column)) != 0 {
 					if self.high_res_mode == true {
-						match self.config.variant {
-							Variant::Chip8 | Variant::SChip => {
-								let x = (x_base + column as u16) as usize;
-								let y = (y_base + row as u16) as usize;
-								let index = x + self.screen_width * y;
-								if x < self.screen_width && y < self.screen_height {
-					 				row_flipped |= screen[index];
-									screen[index] ^= true;
-								}
-							}
-							Variant::XOChip => {
-								let x = (x_base + column as u16) as usize % self.screen_width;
-								let y = (y_base + row as u16) as usize % self.screen_height;
-								let index = x + self.screen_width * y;
+						if self.config.quirk_clipping {
+							let x = (x_base + column as u16) as usize;
+							let y = (y_base + row as u16) as usize;
+							let index = x + self.screen_width * y;
+							if x < self.screen_width && y < self.screen_height {
 					 			row_flipped |= screen[index];
 								screen[index] ^= true;
 							}
 						}
+						else {
+							let x = (x_base + column as u16) as usize % self.screen_width;
+							let y = (y_base + row as u16) as usize % self.screen_height;
+							let index = x + self.screen_width * y;
+					 		row_flipped |= screen[index];
+							screen[index] ^= true;
+						}
 					}
+				
 					else if self.high_res_mode == false {
 						match self.config.variant {
 							Variant::Chip8 => {
-								let x = (x_base + column) as usize;
-								let y = (y_base + row as u16) as usize;
+								if self.config.quirk_clipping {
+									let x = (x_base + column) as usize;
+									let y = (y_base + row as u16) as usize;
 
-								let index = x + self.screen_width * y;
+									let index = x + self.screen_width * y;
 
-								if x < self.screen_width && y < self.screen_height {
-									row_flipped |= screen[index];
-									screen[index] ^= true;	
+									if x < self.screen_width && y < self.screen_height {
+										row_flipped |= screen[index];
+										screen[index] ^= true;	
+									}
+								}
+								else {
+									let x = (x_base + column as u16) as usize % self.screen_width;
+									let y = (y_base + row as u16) as usize % self.screen_height;
+									let index = x + self.screen_width * y;
+					 				row_flipped |= screen[index];
+									screen[index] ^= true;
 								}
 							}
-							Variant::SChip => {
+							Variant::SChip | Variant::XOChip => {
 								// 	Get the x_base and y_base again
 								// since we need to wrap around the low_res
 								// low_res dimensions
 								let x_base = x_base % ((self.screen_width / 2) as u16);
 								let y_base = y_base % ((self.screen_height / 2) as u16);
-								
-								let x = 2 * (x_base + column as u16) as usize;
-								let y = 2 * (y_base + row as u16) as usize;
-								let index = x + self.screen_width * y;
-								if x < self.screen_width && y < self.screen_height {
+								if self.config.quirk_clipping {
+									let x = 2 * (x_base + column as u16) as usize;
+									let y = 2 * (y_base + row as u16) as usize;
+									let index = x + self.screen_width * y;
+									if x < self.screen_width && y < self.screen_height {
+										row_flipped |= screen[index];
+										screen[index] ^= true;
+										row_flipped |= screen[index+1];
+										screen[index+1] ^= true;
+										row_flipped |= screen[index+self.screen_width];
+										screen[index+self.screen_width] ^= true;
+										row_flipped |= screen[index+self.screen_width + 1];
+										screen[index+self.screen_width+1] ^= true;
+									}		
+								}
+								else {
+									let x = 2 * (x_base + column as u16) as usize % self.screen_width;
+									let y = 2 * (y_base + row as u16) as usize % self.screen_height;
+									let index = x + self.screen_width * y;
 									row_flipped |= screen[index];
 									screen[index] ^= true;
 									row_flipped |= screen[index+1];
@@ -536,29 +559,9 @@ impl Emulator {
 									screen[index+self.screen_width] ^= true;
 									row_flipped |= screen[index+self.screen_width + 1];
 									screen[index+self.screen_width+1] ^= true;
-								}	
-							}
-							Variant::XOChip => {
-								// 	Get the x_base and y_base again
-								// since we need to wrap around the low_res
-								// low_res dimensions
-								let x_base = x_base % ((self.screen_width / 2) as u16);
-								let y_base = y_base % ((self.screen_height / 2) as u16);
-								
-								let x = 2 * (x_base + column as u16) as usize % self.screen_width;
-								let y = 2 * (y_base + row as u16) as usize % self.screen_height;
-								let index = x + self.screen_width * y;
-								row_flipped |= screen[index];
-								screen[index] ^= true;
-								row_flipped |= screen[index+1];
-								screen[index+1] ^= true;
-								row_flipped |= screen[index+self.screen_width];
-								screen[index+self.screen_width] ^= true;
-								row_flipped |= screen[index+self.screen_width + 1];
-								screen[index+self.screen_width+1] ^= true;
+								}
 							}
 						}
-						
 					}
 				}
 			}
@@ -767,9 +770,8 @@ impl Emulator {
 		let v_index1 = x as usize;
 		let v_index2 = y as usize;
 		self.v_register[v_index1] = self.v_register[v_index1] | self.v_register[v_index2];
-		match self.config.variant {
-			Variant::Chip8 => self.v_register[0xF] = 0,
-			Variant::SChip | Variant::XOChip => (),
+		if self.config.quirk_vfreset {
+			self.v_register[0xF] = 0;
 		}
 	}
 
@@ -778,9 +780,8 @@ impl Emulator {
 		let v_index1 = x as usize;
 		let v_index2 = y as usize;
 		self.v_register[v_index1] = self.v_register[v_index1] & self.v_register[v_index2];
-		match self.config.variant {
-			Variant::Chip8 => self.v_register[0xF] = 0,
-			Variant::SChip | Variant::XOChip => (),
+		if self.config.quirk_vfreset {
+			self.v_register[0xF] = 0;
 		}
 	}
 
@@ -789,9 +790,8 @@ impl Emulator {
 		let v_index1 = x as usize;
 		let v_index2 = y as usize;
 		self.v_register[v_index1] = self.v_register[v_index1] ^ self.v_register[v_index2];
-		match self.config.variant {
-			Variant::Chip8 => self.v_register[0xF] = 0,
-			_ => (),
+		if self.config.quirk_vfreset {
+			self.v_register[0xF] = 0;
 		}
 	}
 
@@ -827,17 +827,15 @@ impl Emulator {
 	fn opcode_8xy6(&mut self, x: u8, y: u8) {
 		let index1 = x as usize;
 		let index2 = y as usize;
-		// TODO: QUIRK OPTION
-		match self.config.variant {
-			Variant::Chip8 => self.v_register[index1] = self.v_register[index2],
-			Variant::SChip => (),
-			Variant::XOChip => self.v_register[index1] = self.v_register[index2],
+		if !self.config.quirk_shifting {
+			self.v_register[index1] = self.v_register[index2];
 		}
 		let lsb = self.v_register[index1] & 1;
 		self.v_register[index1] >>= 1;
 		self.v_register[0xF] = lsb;
 	}
-			// 8XY7: V[x] = V[y] - V[x]
+	
+	// 8XY7: V[x] = V[y] - V[x]
 	fn opcode_8xy7(&mut self, x: u8, y: u8) {
 		let v_index1 = x as usize;
 		let v_index2 = y as usize;
@@ -855,10 +853,8 @@ impl Emulator {
 	fn opcode_8xye(&mut self, x: u8, y: u8) {
 		let index1 = x as usize;
 		let index2 = y as usize;
-		match self.config.variant {
-			Variant::Chip8 => self.v_register[index1] = self.v_register[index2],
-			Variant::SChip => (),
-			Variant::XOChip => self.v_register[index1] = self.v_register[index2],
+		if !self.config.quirk_shifting {
+			self.v_register[index1] = self.v_register[index2];
 		}
 		let msb = (self.v_register[index1] >> 7) & 1;
 		self.v_register[index1] <<= 1;
@@ -886,10 +882,10 @@ impl Emulator {
 	// BMMM: Jump to MMM + V[0]
 	fn opcode_bmmm(&mut self, mmm:u16, digit2: u8) {
 		let address = mmm;
-		let index = match self.config.variant {
-			Variant::Chip8 => 0,
-			Variant::SChip => digit2 as usize,
-			Variant::XOChip => 0,
+		let index = if self.config.quirk_jumping {
+			digit2 as usize
+		} else {
+			0
 		};
 		self.pc = address + (self.v_register[index] as u16);
 	}
@@ -908,21 +904,26 @@ impl Emulator {
 					  self.screen_width as u8) as u16;
 		let y_base = (self.v_register[y as usize] %
 					  self.screen_height as u8) as u16;
+		
 		match self.config.variant {
-			Variant::Chip8 => {
-				if self.key_frame == false {
-					self.pc -= 2;
-					return;
+			Variant::Chip8 | Variant::SChip => {
+				if self.config.quirk_displaywait {
+					if self.key_frame == false {
+						self.pc -= 2;
+						return;
+					}
 				}
-				let base_address = self.i_register;
-				self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane1);
-			}
-			Variant::SChip => {
 				let base_address = self.i_register;
 				self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane1);
 			}
 			
 			Variant::XOChip => {
+				if self.config.quirk_displaywait {
+					if self.key_frame == false {
+						self.pc -= 2;
+						return;
+					}
+				}
 				let mut base_address = self.i_register;
 				match self.plane {
 					BitPlane::NoPlane => (),
@@ -1041,14 +1042,8 @@ impl Emulator {
 			let ram_index = (self.i_register + i as u16) as usize;
 			self.ram[ram_index] = self.v_register[i];
 		}
-		match self.config.variant {
-			Variant::Chip8 => {
-				self.i_register = self.i_register + last_index as u16 + 1;		
-			}
-			Variant::XOChip => {
-				self.i_register = self.i_register + last_index as u16 + 1;		
-			}					
-			Variant::SChip => ()
+		if self.config.quirk_memory {
+			self.i_register = self.i_register + last_index as u16 + 1;
 		}
 	}
 	// FX65: Load V[0] to V[x] from M[I]
@@ -1236,14 +1231,10 @@ impl Emulator {
 		for i in 0..16 {
 			self.pattern_buffer[i] = self.ram[self.i_register as usize + i];
 		}
-		// for i in 0..16 {
-		// 	println!("{:#04}", self.pattern_buffer[i]);
-		// }
 	}
 	
 	// FX3A: Set the pitch register to V[x]
 	fn opcode_fx3a(&mut self, x: u8) {
-		println!("Pitch!");
 		self.pitch = x;
 	}
 	

@@ -133,7 +133,6 @@ impl AudioDriver {
 	// Call this once per frame to play the correct sound
 	pub fn handle_audio(&mut self, beep: bool) {
 		if !self.play_sound && beep {
-			println!("BEEP");
 			self.play_sound = true;
 			match self.chip8_audio_device {
 				Some(ref device) => device.resume(),
@@ -141,7 +140,6 @@ impl AudioDriver {
 			}
 		}
 		else if self.play_sound && !beep {
-			println!("NO BEEP");
 			self.play_sound = false;
 			match self.chip8_audio_device {
 				Some(ref device) => device.pause(),

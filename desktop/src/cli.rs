@@ -12,6 +12,7 @@ pub enum CLIVariant {
 #[command(author, version, about, long_about = None)]
 pub struct Args {
 
+	// The file name we read, must be given as an argument
 	pub file_name: String,
 
 	// Emulation Settings
@@ -20,16 +21,14 @@ pub struct Args {
 
 	#[arg(long)]
 	pub quirk_vfreset: bool,
-
 	#[arg(long)]
 	pub quirk_memory: bool,
-
+	#[arg(long)]
+	pub quirk_displaywait: bool,
 	#[arg(long)]
 	pub quirk_clipping: bool,
-	
 	#[arg(long)]
 	pub quirk_shifting: bool,
-
 	#[arg(long)]
 	pub quirk_jumping: bool,
 	
@@ -43,12 +42,13 @@ pub struct Args {
 	#[arg(short, long, default_value_t = 10)]
 	pub scale: u8,
 
-	// Whether we want vsync on or off
+	// Whether we want to turn vsync off
 	#[arg(long)]
-	pub vsync: bool
+	pub vsync_off: bool
 }
 
 impl Args {
+	// Returns the variant given from the CLI
 	pub fn get_variant(&self) -> chip8_core::Variant {
 		match self.variant {
 			CLIVariant::Chip8 => chip8_core::Variant::Chip8,
@@ -57,13 +57,15 @@ impl Args {
 		}
 	}
 
+	// Returns an emulation config from the arguments given
 	pub fn get_emuconfig(&self) -> chip8_core::EmuConfig {
-		let emu_config = match self.variant {
+		let mut emu_config = match self.variant {
 			CLIVariant::Chip8 => {
 				chip8_core::EmuConfig {
 					variant: chip8_core::Variant::Chip8,
 					quirk_vfreset: true,
 					quirk_memory: true,
+					quirk_displaywait: true,
 					quirk_clipping: true,
 					quirk_shifting: false,
 					quirk_jumping: false,
@@ -74,6 +76,7 @@ impl Args {
 					variant: chip8_core::Variant::SChip,
 					quirk_vfreset: false,
 					quirk_memory: false,
+					quirk_displaywait: false,
 					quirk_clipping: true,
 					quirk_shifting: true,
 					quirk_jumping: true,
@@ -84,12 +87,31 @@ impl Args {
 					variant: chip8_core::Variant::XOChip,
 					quirk_vfreset: false,
 					quirk_memory: true,
+					quirk_displaywait: false,
 					quirk_clipping: false,
 					quirk_shifting: false,
 					quirk_jumping: false,
 				}
 			}
 		};
+		if self.quirk_vfreset  {
+			emu_config.quirk_vfreset = !emu_config.quirk_vfreset;
+		}
+		if self.quirk_memory  {
+			emu_config.quirk_memory = !emu_config.quirk_memory;
+		}
+		if self.quirk_displaywait  {
+			emu_config.quirk_displaywait = !emu_config.quirk_displaywait;
+		}
+		if self.quirk_clipping  {
+			emu_config.quirk_clipping = !emu_config.quirk_clipping;
+		}
+		if self.quirk_shifting  {
+			emu_config.quirk_shifting = !emu_config.quirk_shifting;
+		}
+		if self.quirk_jumping  {
+			emu_config.quirk_jumping = !emu_config.quirk_jumping;
+		}
 		emu_config
 	}
 }

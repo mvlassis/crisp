@@ -1,11 +1,14 @@
 [frontend]
-palette = "bitbee"
+palette = "classic"
+palettes_available = ["classic", "inverted", "casio", "obradinn", "octo", "paperback", "ice_cream", "bitbee", "funkyjam"]
 
-default = ["#000000", "#FFFFFF"]
+classic = ["#000000", "#FFFFFF"]
 inverted = ["#FFFFFF", "#000000"]
 obradinn = ["#2e3037", "#ebe5ce"]
 casio = ["#83b07e", "#000000"]
+octo = ["#996600", "#ffcc00", "#ff6600", "#662200"]
 monitor_glow = ["#222323", "#f0f6f0"]
 paperback = ["#b8c2b9", "#382b26"]
+ice_cream = ["#7c3f58", "#eb6b6f", "#f9a875", "#fff6d3"]
 bitbee = ["#292b30", "#cfab4a"]
 funkyjam = ["#920244", "#fec28c"]
