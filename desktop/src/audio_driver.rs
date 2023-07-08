@@ -68,14 +68,16 @@ pub struct AudioDriver {
 	chip8_audio_device: Option <AudioDevice<SquareWave>>,
 	xo_audio_device: Option <AudioDevice<PatternWave>>,
 
-	play_sound: bool,
+	play_sound: bool, // whether sound is being played at this moment
 
 	pub pattern_buffer: [u8; PATTERN_BUFFER_SIZE],
-	pub frequency: i32
+	pub frequency: i32,
+
+	mute: bool,
 }
 
 impl AudioDriver {
-	pub fn new(audio_subsystem: &AudioSubsystem, variant: &Variant, buffer: [u8; PATTERN_BUFFER_SIZE], desired_frequency: i32) -> Self {
+	pub fn new(audio_subsystem: &AudioSubsystem, variant: &Variant, buffer: [u8; PATTERN_BUFFER_SIZE], desired_frequency: i32, is_mute: bool) -> Self {
 		
 		let spec = if *variant == Variant::XOChip {
 			AudioSpecDesired {
@@ -127,11 +129,26 @@ impl AudioDriver {
 			
 			pattern_buffer: buffer,
 			frequency: desired_frequency,
+			mute: is_mute
 		}
 	}
 
+	pub fn toggle_mute(&mut self) {
+		if self.play_sound {
+			self.mute = false;
+			match self.chip8_audio_device {
+				Some(ref device) => device.resume(),
+				None => self.xo_audio_device.as_ref().unwrap().resume(),
+			}
+		}
+		else {
+			self.mute = !self.mute;
+		}
+	}
+	
 	// Call this once per frame to play the correct sound
 	pub fn handle_audio(&mut self, beep: bool) {
+		if self.mute {return;}
 		if !self.play_sound && beep {
 			self.play_sound = true;
 			match self.chip8_audio_device {

@@ -13,7 +13,7 @@ use clap::Parser;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
-use spin_sleep; // More accurate than thread::spin_sleep
+use spin_sleep; // More accurate than thread::sleep
 
 use audio_driver::AudioDriver;
 use video_driver::VideoDriver;
@@ -27,7 +27,6 @@ fn main() {
 	let video_subsystem = sdl_context.video().unwrap();
 
 	let selected_variant = args.get_variant();
-	
 	let screen_width = match selected_variant {
 		Variant::Chip8 => 64,
 		Variant::SChip => 128,
@@ -40,12 +39,12 @@ fn main() {
 	};			
 
 	// Get all available palettes from the config
-	let palettes = get_all_palettes();
-	
+	let palettes = get_all_palettes();	
 	let mut video_driver = VideoDriver::new(&video_subsystem, screen_width, screen_height, palettes, args.scale as u32);
 
+	// Get settings for the emulator and create an object
 	let emu_config = args.get_emuconfig();
-	
+	let mut ticks_per_frame = args.ticks_per_frame;
 	let mut chip8_emulator = Emulator::new(&emu_config);
 	
 	let mut rom = File::open(&args.file_name).expect("Unable to open file");
@@ -56,11 +55,13 @@ fn main() {
 	
 	let audio_subsystem = sdl_context.audio().unwrap();
 	let pattern_buffer_copy = chip8_emulator.pattern_buffer.to_owned();
-	let mut audio_driver = AudioDriver::new(&audio_subsystem, &selected_variant, pattern_buffer_copy, chip8_emulator.get_sound_frequency());
+	let mut audio_driver = AudioDriver::new(&audio_subsystem, &selected_variant, pattern_buffer_copy, chip8_emulator.get_sound_frequency(), args.mute);
 
 	// Used for the FPS counter
 	let timer_subsystem = sdl_context.timer().unwrap();
 
+	let mut save_state: Option<Emulator> = None;
+	
 	let mut event_pump = sdl_context.event_pump().unwrap();
 	'running: loop {
 		let start: u64 = timer_subsystem.performance_counter();
@@ -71,14 +72,43 @@ fn main() {
 					break 'running
 				},
 				Event::KeyDown { keycode: Some(Keycode::T), .. } => {
+					// Reset the emulator
 					chip8_emulator.reset();
 					chip8_emulator.load(&data_buffer);
 				},
 				Event::KeyDown { keycode: Some(Keycode::Right), .. } => {
+					// Change the palette
 					video_driver.move_palette_right();
 				},
 				Event::KeyDown { keycode: Some(Keycode::Left), .. } => {
+					// Change the palette
 					video_driver.move_palette_left();
+				},
+				Event::KeyDown { keycode: Some(Keycode::Up), .. } => {
+					// Increase the ticks per frame by increments of 5
+					ticks_per_frame += 5;
+				},
+				Event::KeyDown { keycode: Some(Keycode::Down), .. } => {
+					// Decrease the ticks per frame by increments of 5
+					ticks_per_frame = if ticks_per_frame <= 5 {
+						5
+					} else {
+						ticks_per_frame - 5
+					}
+				},
+				Event::KeyDown { keycode: Some(Keycode::M), .. } => {
+					// Mute/Unmute
+					audio_driver.toggle_mute();
+				},
+				Event::KeyDown { keycode: Some(Keycode::O), .. } => {
+					// Save save
+					save_state = Some(chip8_emulator.clone());
+				},
+				Event::KeyDown { keycode: Some(Keycode::I), .. } => {
+					// If there is a save state, load it
+					if save_state.is_some() {
+						chip8_emulator = save_state.clone().unwrap();
+					}
 				},
 				Event::KeyDown { keycode: Some(key), ..} => {
 					if let Some(k) = key2button(key) {
@@ -93,7 +123,9 @@ fn main() {
 				_ => ()
 			}
 		}
-		for i in 0..args.ticks_per_frame {
+		for i in 0..ticks_per_frame {
+			// The first tick on each frame is a "key" frame
+			// This is useful for display wait 
 			match i {
 				0 => chip8_emulator.tick(true),
 				_ => chip8_emulator.tick(false),
@@ -103,8 +135,7 @@ fn main() {
 		chip8_emulator.tick_timers();
 		audio_driver.handle_audio(chip8_emulator.beep);
 		
-		let screen_buffers = chip8_emulator.get_screen_buffers();
-		video_driver.draw_window(screen_buffers);
+		video_driver.draw_window(chip8_emulator.get_screen_buffers());
 
 		if chip8_emulator.get_sound_frequency() != audio_driver.frequency {
 			audio_driver.update_frequency(&audio_subsystem, chip8_emulator.get_sound_frequency());
@@ -118,8 +149,9 @@ fn main() {
 		let end: u64 = timer_subsystem.performance_counter();
 		let seconds: f64 = (end - start) as f64 / timer_subsystem.performance_frequency() as f64;
 
+		// The amount of time left to ensure 60 fps (if vsync is on)
 		let time_delay = (1_000_000_000u64 / 60) - (seconds * 1_000_000_000f64) as u64;
-		if !args.vsync_off {
+		if !args.fpscap_off {
 			spin_sleep::sleep(Duration::new(0, time_delay as u32));
 		}
 

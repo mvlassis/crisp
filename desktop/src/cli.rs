@@ -16,7 +16,7 @@ pub struct Args {
 	pub file_name: String,
 
 	// Emulation Settings
-	#[arg(short, long, value_enum, default_value_t = CLIVariant::Chip8)]
+	#[arg(short, long, value_enum, default_value_t = CLIVariant::SChip)]
 	pub variant: CLIVariant,
 
 	#[arg(long)]
@@ -31,6 +31,8 @@ pub struct Args {
 	pub quirk_shifting: bool,
 	#[arg(long)]
 	pub quirk_jumping: bool,
+	#[arg(long)]
+	pub quirk_clipcollision: bool,
 	
 	// Display settings
 	// How many cycles are executed per frame
@@ -42,9 +44,13 @@ pub struct Args {
 	#[arg(short, long, default_value_t = 10)]
 	pub scale: u8,
 
-	// Whether we want to turn vsync off
+	// Whether we want to turn fps capping off
 	#[arg(long)]
-	pub vsync_off: bool
+	pub fpscap_off: bool,
+
+	// Audio settings
+	#[arg(short, long)]
+	pub mute: bool, // Start muted
 }
 
 impl Args {
@@ -69,6 +75,7 @@ impl Args {
 					quirk_clipping: true,
 					quirk_shifting: false,
 					quirk_jumping: false,
+					quirk_clipcollision: false,
 				}
 			}
 			CLIVariant::SChip => {
@@ -80,6 +87,7 @@ impl Args {
 					quirk_clipping: true,
 					quirk_shifting: true,
 					quirk_jumping: true,
+					quirk_clipcollision: false,
 				}
 			}
 			CLIVariant::XOChip => {
@@ -91,6 +99,7 @@ impl Args {
 					quirk_clipping: false,
 					quirk_shifting: false,
 					quirk_jumping: false,
+					quirk_clipcollision: false,
 				}
 			}
 		};
@@ -111,6 +120,9 @@ impl Args {
 		}
 		if self.quirk_jumping  {
 			emu_config.quirk_jumping = !emu_config.quirk_jumping;
+		}
+		if self.quirk_clipcollision  {
+			emu_config.quirk_clipcollision = !emu_config.quirk_clipcollision;
 		}
 		emu_config
 	}
