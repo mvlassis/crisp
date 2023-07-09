@@ -11,6 +11,18 @@ A CHIP-8, SUPER-CHIP, and XO-CHIP emulator written in Rust.
 - Save states to finally get the edge at PONG
 - Reset/Mute buttons
 
+## Build
+- Clone the repository, then go the the `dekstop` directory and run:
+```
+cd crisp/desktop
+cargo build
+```
+The executable will be in target/debug. You'll need a ROM to play, so I have included some public domain CHIP-8 games in the `c8games` directory. If you want to play PONG you can run:
+```
+./target/debug/desktop ../c8games/PONG
+```
+or just replace the `../c8games/PONG` with the ROM you want to play
+
 ## Controls
 The original COSMAC VIP used the 16 hexadecimal digit keys as inputs. The keyboard is mapped to those keys as follows:
 
