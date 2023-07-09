@@ -62,7 +62,7 @@ The `--quirk-` options toggle the default value of the selected variant. If the 
 
 `--quirk-memory`: The save and load opcodes (Fx55 and Fx65) `increment/do not increment` the index register.
 
-`--quirk-displaywait` Drawing sprites to the display `waits/does not wait` for the vertical blank interrupt, limiting their speed to max 60 sprites per second.
+`--quirk-displaywait` Drawing sprites to the display in low-resolution mode `waits/does not wait` for the vertical blank interrupt, limiting their speed to max 60 sprites per second.
 
 `--quirk-clipping` Sprites drawn at the edges of the screen `get clipped/wrap around`.
 

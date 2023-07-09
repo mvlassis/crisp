@@ -83,7 +83,7 @@ impl Args {
 					variant: chip8_core::Variant::SChip,
 					quirk_vfreset: false,
 					quirk_memory: false,
-					quirk_displaywait: false,
+					quirk_displaywait: true,
 					quirk_clipping: true,
 					quirk_shifting: true,
 					quirk_jumping: true,

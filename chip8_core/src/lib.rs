@@ -931,7 +931,7 @@ impl Emulator {
 		
 		match self.config.variant {
 			Variant::Chip8 | Variant::SChip => {
-				if self.config.quirk_displaywait {
+				if self.config.quirk_displaywait && self.high_res_mode == false {
 					if self.key_frame == false {
 						self.pc -= 2;
 						return;
@@ -942,7 +942,7 @@ impl Emulator {
 			}
 			
 			Variant::XOChip => {
-				if self.config.quirk_displaywait {
+				if self.config.quirk_displaywait && self.high_res_mode == false {
 					if self.key_frame == false {
 						self.pc -= 2;
 						return;
