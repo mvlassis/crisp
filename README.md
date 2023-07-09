@@ -1,5 +1,5 @@
 # chip-8-rust
-Chip-8 emulator written in Rust
+A CHIP-8, SUPER-CHIP, and XO-CHIP emulator written in Rust 
 
 ## Features
 - All opcodes of the original Chip-8 implemented
@@ -14,6 +14,33 @@ Chip-8 emulator written in Rust
 - Reset button
 - Configurable palettes (and the ability to add your own)
 
+## Controls
+The original COSMAC VIP used the 16 hexadecimal digit keys as inputs. The keyboard is mapped to those keys as follows:
+
+`1` `2` `3` `4` -> `1` `2` `3` `C`
+
+`Q` `W` `E` `R` -> `4` `5` `6` `D`
+
+`A` `S` `D` `F` -> `7` `8` `9` `E`
+
+`Z` `X` `C` `V` -> `A` `0` `B` `F`
+
+| Key | Action |
+| ---| --- |
+|`UP` |Increase tick rate by 5|
+|`DOWN` |Decrease tick rate by 5|
+|`RIGHT`| Pick next color theme |
+|`LEFT`| Pick previous color theme |
+|`M`| Mute/Unmute|
+|`O`| Save state|
+|`I`| Load last save state|
+|`P`| Reset Emulator
+|`ESC` | Exit |
+
+
+## Options
+`-m` Start the program muted
+
 ## TODO List
 - ~~Add sound support~~
 - ~~Add configration file to store settings~~
@@ -22,3 +49,7 @@ Chip-8 emulator written in Rust
 - ~~Add reset button~~
 - ~~Support SCHIP-1.1 variant~~
 - Support XO-CHIP variant
+
+## Acknowledgements
+
+## License

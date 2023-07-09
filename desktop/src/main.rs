@@ -71,7 +71,7 @@ fn main() {
 				Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
 					break 'running
 				},
-				Event::KeyDown { keycode: Some(Keycode::T), .. } => {
+				Event::KeyDown { keycode: Some(Keycode::P), .. } => {
 					// Reset the emulator
 					chip8_emulator.reset();
 					chip8_emulator.load(&data_buffer);
