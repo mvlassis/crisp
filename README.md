@@ -1,4 +1,4 @@
-# chip-8-rust
+# Crisp
 A CHIP-8, SUPER-CHIP, and XO-CHIP emulator written in Rust.
 
 ## Features
