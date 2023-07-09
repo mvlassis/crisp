@@ -1,29 +1,23 @@
 # chip-8-rust
-A CHIP-8, SUPER-CHIP, and XO-CHIP emulator written in Rust 
+A CHIP-8, SUPER-CHIP, and XO-CHIP emulator written in Rust.
 
 ## Features
-- All opcodes of the original Chip-8 implemented
-- All quirks of the original Chip-8 correctly implemented
-- All quirks of the SCHIP-1.1 variant correctly implemented
-  - In hires mode, VF is set to the number of rows that include a collision.
-- All opcodes of the XO-Chip variant correctly implemented
-  - All skip instructions correctly skip the 0xF000 opcode)
-- Support for the SCHIP-1.1 variant
-- Sound support
-- Configuration file to store all settings
-- Reset button
-- Configurable palettes (and the ability to add your own)
+- Full support for CHIP-8, SUPER-CHIP, and XO-CHIP.
+- Sound support for all variants
+- Adjustable tick rate
+- The ability to enable/disable quirks that are needed for some games
+- CLI options to tweak the emulator according to the game you're playing
+- Custom palettes that can be switched on the fly (and the ability to add your own)
+- Save states to finally get the edge at PONG
+- Reset/Mute buttons
 
 ## Controls
 The original COSMAC VIP used the 16 hexadecimal digit keys as inputs. The keyboard is mapped to those keys as follows:
 
-`1` `2` `3` `4` -> `1` `2` `3` `C`
-
-`Q` `W` `E` `R` -> `4` `5` `6` `D`
-
-`A` `S` `D` `F` -> `7` `8` `9` `E`
-
-`Z` `X` `C` `V` -> `A` `0` `B` `F`
+`1` `2` `3` `4` -> `1` `2` `3` `C`  
+`Q` `W` `E` `R` -> `4` `5` `6` `D`  
+`A` `S` `D` `F` -> `7` `8` `9` `E`  
+`Z` `X` `C` `V` -> `A` `0` `B` `F`  
 
 | Key | Action |
 | ---| --- |
@@ -39,17 +33,42 @@ The original COSMAC VIP used the 16 hexadecimal digit keys as inputs. The keyboa
 
 
 ## Options
+`-v <VARIANT>` Select the emulator variant (one of: chip8, s-chip, xo-chip)
+
+`-s <SCALE>` Set the scale multiplier [default: 15]
+
+`-t <TICKS_PER_FRAME>` Set he number of ticks (operations) per frame [default: 10]
+
 `-m` Start the program muted
 
-## TODO List
-- ~~Add sound support~~
-- ~~Add configration file to store settings~~
-- Add customization options
-- Add pause/resume button
-- ~~Add reset button~~
-- ~~Support SCHIP-1.1 variant~~
-- Support XO-CHIP variant
+`--fpscap-off`: Turn off capping the framerate at 60fps
+
+
+The `--quirk-` options toggle the default value of the selected variant. If the quirk is by default `True` for a specific variant, it is set to `False`, and vice versa. 
+
+`--quirk-vfreset`: The AND, OR, and XOR Opcodes (8xy1, 8xy2 and 8xy3) `reset/do not reset` the flags register to 0. 
+
+`--quirk-memory`: The save and load opcodes (Fx55 and Fx65) `increment/do not increment` the index register.
+
+`--quirk-displaywait` Drawing sprites to the display `waits/does not wait` for the vertical blank interrupt, limiting their speed to max 60 sprites per second.
+
+`--quirk-clipping` Sprites drawn at the edges of the screen `get clipped/wrap around`.
+
+`--quirk-shifting` The shift opcodes (8xy6 and 8xyE) `store the shifted version of V[y] in V[x]/only operate on V[x]`.
+
+`--quirk-jumping` The "jump to some address plus v0" instruction (Bnnn) `use V[x] (where x is the highest nibble of nnn) instead of V[0]/only uses V[0]`.
+
+`--quirk-clipcollision` The draw opcode (dxyn) in high-resolution mode `add to the flag register the number of rows that get clipped at the bottom edge of the screen/does not do this`. A weird quirk in the original SUPER-CHIP.
+
 
 ## Acknowledgements
+- [Aquova's chip8-book](https://github.com/aquova/chip8-book) was my intial reference and very thorough for a complete beginner to emulation like me.
+- [Timendus' chip8-test-suite](https://github.com/Timendus/chip8-test-suite) has been invaluable in debugging.
+- I used [Octo](https://johnearnest.github.io/Octo/) whenever I wanted to see what games should run like in my emulator.
+- [pich8](https://github.com/philw07/pich8/tree/master) was useful both as a reference for Rust emulation in general and while implementing the high resolution mode of the SUPER-CHIP
+- [JAXE](https://github.com/kurtjd/jaxe/blob/main/README.md) was another resource I looked at, and basically copied their implementation of the sound driver in SDL.
+- [A very thorough article of all CHIP-8 extensions](https://chip-8.github.io/extensions/).
+- [John Earnest's XO-CHIP specification](https://johnearnest.github.io/Octo/docs/XO-ChipSpecification.html)
+- [Gulrak's opcode table](https://chip8.gulrak.net/?p=chip8,schip11,xochip) explains the weird quirks of all CHIP-8 variants
 
 ## License
