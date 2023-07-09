@@ -558,11 +558,14 @@ impl Emulator {
 									if x < self.screen_width && y < self.screen_height {
 										flipped_rows[row as usize] |= screen[index];
 										screen[index] ^= true;
-										flipped_rows[row as usize] |= screen[index];
+
+										flipped_rows[row as usize] |= screen[index+1];
 										screen[index+1] ^= true;
-										flipped_rows[row as usize] |= screen[index];
+
+										flipped_rows[row as usize] |= screen[index+self.screen_width];
 										screen[index+self.screen_width] ^= true;
-										flipped_rows[row as usize] |= screen[index];
+
+										flipped_rows[row as usize] |= screen[index+self.screen_width+1];
 										screen[index+self.screen_width+1] ^= true;
 									}		
 								}
@@ -572,11 +575,14 @@ impl Emulator {
 									let index = x + self.screen_width * y;
 									flipped_rows[row as usize] |= screen[index];
 									screen[index] ^= true;
-									flipped_rows[row as usize] |= screen[index];
+
+									flipped_rows[row as usize] |= screen[index+1];
 									screen[index+1] ^= true;
-									flipped_rows[row as usize] |= screen[index];
+
+									flipped_rows[row as usize] |= screen[index+self.screen_width];
 									screen[index+self.screen_width] ^= true;
-									flipped_rows[row as usize] |= screen[index];
+
+									flipped_rows[row as usize] |= screen[index+self.screen_width+1];
 									screen[index+self.screen_width+1] ^= true;
 								}
 							}
