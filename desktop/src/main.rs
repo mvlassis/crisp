@@ -153,7 +153,7 @@ fn main() {
 		let nominator = 1_000_000_000u64 / 60;
 		let denominator = (seconds * 1_000_000_000f64) as u64;
 		let time_delay = nominator.checked_sub(denominator);
-		if !args.fpscap_off {
+		if args.get_fpscap() {
 			match time_delay {
 				Some(result) => spin_sleep::sleep(Duration::new(0, result as u32)),
 		

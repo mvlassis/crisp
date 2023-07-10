@@ -46,7 +46,7 @@ pub struct Args {
 
 	// Whether we want to turn fps capping off
 	#[arg(long)]
-	pub fpscap_off: bool,
+	pub toggle_fpscap: bool,
 
 	// Audio settings
 	#[arg(short, long)]
@@ -63,6 +63,18 @@ impl Args {
 		}
 	}
 
+	pub fn get_fpscap(&self) -> bool {
+		let mut fpscap = match self.variant {
+			CLIVariant::Chip8 => false,
+			CLIVariant::SChip => false,
+			CLIVariant::XOChip => true,
+		};
+		if self.toggle_fpscap {
+			fpscap = !fpscap;
+		}
+		fpscap
+	}
+	
 	// Returns an emulation config from the arguments given
 	pub fn get_emuconfig(&self) -> chip8_core::EmuConfig {
 		let mut emu_config = match self.variant {
