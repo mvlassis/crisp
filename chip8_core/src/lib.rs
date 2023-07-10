@@ -959,7 +959,7 @@ impl Emulator {
 	fn opcode_ex9e(&mut self, x: u8) {
 		// EX9E - Skip if key VX is pressed
 		let index = x as usize;
-		let vx = self.v_register[index];
+		let vx = self.v_register[index] & 0xF;
 		let key = self.keys[vx as usize];
 		if key {
 			self.pc += 2;
@@ -972,7 +972,7 @@ impl Emulator {
 	// EXA1 - Skip if key VX is not pressed
 	fn opcode_exa1(&mut self, x: u8) {
 		let index = x as usize;
-		let vx = self.v_register[index];
+		let vx = self.v_register[index] & 0xF;
 		let key = self.keys[vx as usize];
 		if !key {
 			self.pc += 2;
@@ -1024,7 +1024,7 @@ impl Emulator {
 	// FX29: Set I to show digit V[x]
 	fn opcode_fx29(&mut self, x: u8) {
 		let index = x as usize;
-		let character = self.v_register[index] as u16;
+		let character =(self.v_register[index] & 0xF as u8) as u16;
 		self.i_register = character * 5;
 		
 	}
@@ -1129,7 +1129,7 @@ impl Emulator {
 	// FX30: Set I to 10-byte font for digit V[x] 
 	fn opcode_fx30(&mut self, x: u8) {
 		let index = x as usize;
-		let character = self.v_register[index] as u16;
+		let character = (self.v_register[index] & 0xF) as u16;
 		self.i_register = FONTSET_SIZE as u16 + character * 10;
 	}
 
