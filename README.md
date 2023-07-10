@@ -2,9 +2,9 @@
 A CHIP-8, SUPER-CHIP, and XO-CHIP emulator written in Rust.
 
 ## Gallery
-<img src="gallery/pong.png" width = "768"> <img src="gallery/sweetcopter.png" width = "768"> <img src="gallery/superneatboy.png" width = "768">
+<img src="gallery/pong.png" width = "800"> <img src="gallery/sweetcopter.png" width = "800"> <img src="gallery/superneatboy.png" width = "800">
 
-<img src="gallery/alien-inv8sion.gif" width = "768">
+<img src="gallery/alien-inv8sion.gif" width = "800">
 
 
 ## Features
