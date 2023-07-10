@@ -1050,15 +1050,8 @@ impl Emulator {
 			let ram_index = (self.i_register + i as u16) as usize;
 			self.v_register[i] = self.ram[ram_index];
 		}
-		match self.config.variant {
-			Variant::Chip8 => {
-				self.i_register = self.i_register + last_index as u16 + 1;		
-			}
-			Variant::XOChip => {
-				self.i_register = self.i_register + last_index as u16 + 1;		
-			}
-			Variant::SChip => ()
-				
+		if self.config.quirk_memory {
+			self.i_register = self.i_register + last_index as u16 + 1;
 		}								
 	}
 
