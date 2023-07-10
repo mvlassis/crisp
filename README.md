@@ -40,7 +40,7 @@ The original COSMAC VIP used the 16 hexadecimal digit keys as inputs. The keyboa
 |`M`| Mute/Unmute|
 |`O`| Save state|
 |`I`| Load last save state|
-|`P`| Reset Emulator
+|`BACKSPACE`| Reset Emulator
 |`ESC` | Exit |
 
 
@@ -62,7 +62,7 @@ The `--quirk-` options toggle the default value of the selected variant. If the 
 
 `--quirk-memory`: The save and load opcodes (Fx55 and Fx65) `increment/do not increment` the index register.
 
-`--quirk-displaywait` Drawing sprites to the display in low-resolution mode `waits/does not wait` for the vertical blank interrupt, limiting their speed to max 60 sprites per second.
+`--quirk-displaywait` Drawing sprites to the display in low-resolution mode `waits/does not wait` for the vertical blank interrupt, limiting their speed to at most 1 draw opcode per frame.
 
 `--quirk-clipping` Sprites drawn at the edges of the screen `get clipped/wrap around`.
 
