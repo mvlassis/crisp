@@ -86,6 +86,7 @@ pub struct Emulator {
 	stack_pointer: i16,
 	stack: [u16; STACK_SIZE],
 	keys: [bool; NUM_KEYS],
+	previous_frame_keys: [bool; NUM_KEYS],
 	delay_timer: u8,
 	sound_timer: u8,
 	pub beep: bool, // True if the system should emit sound
@@ -137,6 +138,7 @@ impl Emulator {
 			stack_pointer: -1,
 			stack: [0; STACK_SIZE],
 			keys: [false; NUM_KEYS],
+			previous_frame_keys: [false; NUM_KEYS],
 			delay_timer: 0,
 			sound_timer: 0,
 			beep: false,
@@ -163,6 +165,9 @@ impl Emulator {
 
 	// Decrement the delay and sound timers by 1
 	pub fn tick_timers(&mut self) {
+		// Copy the keys state of the previous frame
+		self.previous_frame_keys = self.keys.clone();
+		
 		if self.delay_timer > 0 {
 			self.delay_timer -= 1;
 		}
@@ -192,6 +197,7 @@ impl Emulator {
 		self.stack_pointer = -1;
 		self.stack = [0; STACK_SIZE];
 		self.keys = [false; NUM_KEYS];
+		self.previous_frame_keys = [false; NUM_KEYS];
 		self.delay_timer = 0;
 		self.sound_timer = 0;
 		self.ram[..FONTSET_SIZE].copy_from_slice(&FONTSET);
@@ -981,19 +987,21 @@ impl Emulator {
 		let index = x as usize;
 		self.v_register[index] = self.delay_timer;
 	}
-	// FX0A - Wait for key press
+	// FX0A - Wait for key press release
 	fn opcode_fx0a(&mut self, x: u8) {
-		let mut pressed = false;
+		let mut released = false;
 		let index = x as usize;
 		for i in 0..self.keys.len() {
-			if self.keys[i] {
+			// We register a release if a key was pressed on the previous frame
+			// and not pressed on the current
+			if self.keys[i] == false && self.previous_frame_keys[i] == true {
 				self.v_register[index] = i as u8;
-				pressed = true;
+				released = true;
 				break;
 			}
 		}
 		// If no key was pressed, rewind the PC
-		if !pressed {
+		if !released {
 			self.pc -= 2;
 		}
 	}
