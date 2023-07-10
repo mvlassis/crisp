@@ -2,13 +2,14 @@
 A CHIP-8, SUPER-CHIP, and XO-CHIP emulator written in Rust.
 
 ## Gallery
-<img src="gallery/pong.png" width = "512"> <img src="gallery/superneatboy.png" width = "512">
+<img src="gallery/pong.png" width = "768"> <img src="gallery/sweetcopter.png" width = "768"> <img src="gallery/superneatboy.png" width = "768">
 
-<img src="gallery/alien-inv8sion.gif" width = "512">
+<img src="gallery/alien-inv8sion.gif" width = "768">
 
 
 ## Features
 - Full support for CHIP-8, SUPER-CHIP, and XO-CHIP.
+- XO-CHIP even has full support for an extended palette of 16 colors.
 - Sound support for all variants
 - Adjustable tick rate
 - The ability to enable/disable quirks that are needed for some games
