@@ -66,7 +66,7 @@ impl Args {
 	pub fn get_fpscap(&self) -> bool {
 		let mut fpscap = match self.variant {
 			CLIVariant::Chip8 => false,
-			CLIVariant::SChip => false,
+			CLIVariant::SChip => true,
 			CLIVariant::XOChip => true,
 		};
 		if self.toggle_fpscap {

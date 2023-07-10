@@ -225,6 +225,7 @@ impl Emulator {
 		self.keys[index] = pressed;
 	}
 
+	// Loads a ROM into ram starting from START_ADDRESS
 	pub fn load(&mut self, data: &[u8]) {
 		let start = START_ADDRESS as usize;
 		let end = start + data.len();
@@ -242,7 +243,8 @@ impl Emulator {
 		self.stack_pointer -= 1;
 		self.stack[(self.stack_pointer + 1) as usize]
 	}
-	
+
+	// Get and return the next opcode according to the PC
 	fn fetch(&mut self) -> u16 {
 		let higher_byte = self.ram[self.pc as usize] as u16;
 		let lower_byte = self.ram[(self.pc + 1) as usize] as u16;
@@ -442,7 +444,7 @@ impl Emulator {
 	}
 	
 	// Draws sprites on the screen by writing bits on the screen buffers
-	fn draw_sprite(&mut self, x_base: u16, y_base: u16, n: u8, base_address: u16, plane_index: usize) -> Vec<bool>{
+	fn draw_sprite(&mut self, x_base: u16, y_base: u16, n: u8, base_address: u16, plane_index: usize) {
 		let screen = &mut self.screen[plane_index];
 		let width = if n == 0 {
 			2
@@ -456,8 +458,7 @@ impl Emulator {
 		};
 		
 		let mut num_rows = if n == 0 {16} else {n};
-		// True if row i has at least one pixel that has been flipped
-		let mut flipped_rows = vec![false; num_rows as usize];
+		let mut total_flipped_rows = 0;
 		// Only needed for that weird quirk in S-Chip where the V[0xF] register
 		// is set to the number of rows with collisions PLUS the number of rows
 		// clipped at the bottom order
@@ -476,6 +477,7 @@ impl Emulator {
 			} else {
 				self.ram[address] as u16
 			};
+			let mut is_current_row_flipped = false;
 			for column in 0..(width * 8) {
 				if (pixels & (mask >> column)) != 0 {
 					if self.high_res_mode == true {
@@ -484,7 +486,7 @@ impl Emulator {
 							let y = (y_base + row as u16) as usize;
 							let index = x + self.screen_width * y;
 							if x < self.screen_width && y < self.screen_height {
-								flipped_rows[row as usize] |= screen[index];
+								is_current_row_flipped |= screen[index];
 								screen[index] ^= true;
 							}
 							else if y >= self.screen_height && self.config.quirk_clipcollision {
@@ -495,7 +497,7 @@ impl Emulator {
 							let x = (x_base + column as u16) as usize % self.screen_width;
 							let y = (y_base + row as u16) as usize % self.screen_height;
 							let index = x + self.screen_width * y;
-							flipped_rows[row as usize] |= screen[index];
+							is_current_row_flipped |= screen[index];
 							screen[index] ^= true;
 						}
 					}
@@ -510,7 +512,7 @@ impl Emulator {
 									let index = x + self.screen_width * y;
 
 									if x < self.screen_width && y < self.screen_height {
-										flipped_rows[row as usize] |= screen[index];
+										is_current_row_flipped |= screen[index];
 										screen[index] ^= true;	
 									}
 								}
@@ -518,14 +520,17 @@ impl Emulator {
 									let x = (x_base + column as u16) as usize % self.screen_width;
 									let y = (y_base + row as u16) as usize % self.screen_height;
 									let index = x + self.screen_width * y;
-					 				flipped_rows[row as usize] |= screen[index];
+									is_current_row_flipped |= screen[index];
 									screen[index] ^= true;
 								}
 							}
 							Variant::SChip | Variant::XOChip => {
-								// 	Get the x_base and y_base again
-								// since we need to wrap around the low_res
-								// low_res dimensions
+								// On low resolution mode in these 2 variants
+								// Each pixel draw counts as a 2x2 pixel on the
+								// final screen
+								
+								// Get the x_base and y_base again since we
+								// need to wrap around the low_res dimensions
 								let x_base = x_base % ((self.screen_width / 2) as u16);
 								let y_base = y_base % ((self.screen_height / 2) as u16);
 								if self.config.quirk_clipping {
@@ -533,16 +538,17 @@ impl Emulator {
 									let y = 2 * (y_base + row as u16) as usize;
 									let index = x + self.screen_width * y;
 									if x < self.screen_width && y < self.screen_height {
-										flipped_rows[row as usize] |= screen[index];
+										is_current_row_flipped |= screen[index];
 										screen[index] ^= true;
 
-										flipped_rows[row as usize] |= screen[index+1];
+										is_current_row_flipped |= screen[index+1];
 										screen[index+1] ^= true;
 
-										flipped_rows[row as usize] |= screen[index+self.screen_width];
+										is_current_row_flipped |= screen[index+self.screen_width];
 										screen[index+self.screen_width] ^= true;
 
-										flipped_rows[row as usize] |= screen[index+self.screen_width+1];
+		
+										is_current_row_flipped |= screen[index+self.screen_width+1];
 										screen[index+self.screen_width+1] ^= true;
 									}		
 								}
@@ -550,16 +556,16 @@ impl Emulator {
 									let x = 2 * (x_base + column as u16) as usize % self.screen_width;
 									let y = 2 * (y_base + row as u16) as usize % self.screen_height;
 									let index = x + self.screen_width * y;
-									flipped_rows[row as usize] |= screen[index];
+									is_current_row_flipped |= screen[index];
 									screen[index] ^= true;
 
-									flipped_rows[row as usize] |= screen[index+1];
+									is_current_row_flipped |= screen[index+1];
 									screen[index+1] ^= true;
 
-									flipped_rows[row as usize] |= screen[index+self.screen_width];
+									is_current_row_flipped |= screen[index+self.screen_width];
 									screen[index+self.screen_width] ^= true;
 
-									flipped_rows[row as usize] |= screen[index+self.screen_width+1];
+									is_current_row_flipped |= screen[index+self.screen_width+1];
 									screen[index+self.screen_width+1] ^= true;
 								}
 							}
@@ -567,20 +573,25 @@ impl Emulator {
 					}
 				}
 			}
+			if is_current_row_flipped {
+			total_flipped_rows += 1;
+			}
 		}
-		let sum: u8 = flipped_rows.iter().map(|&x| x as u8).sum();
-		if self.high_res_mode == true {
-			self.v_register[0xF] = sum + clipped_rows;
+		// On SUPER-CHIP in high resolution mode, V[0xF] is set to the number
+		// or rows that have been flipped + the number of clipped rows at the
+		// bottom edge
+		if self.high_res_mode == true && self.config.variant == Variant::SChip {
+			self.v_register[0xF] = total_flipped_rows + clipped_rows;
 		}
+		// Otherwise, V[0xF] is set 1 if at least 1 pixel has been flipped
 		else {
-			if sum > 0 {
+			if total_flipped_rows > 0 {
 				self.v_register[0xF] = 1;	
 			}
 			else {
 				self.v_register[0xF] = 0;
 			}
 		}
-		flipped_rows
 	}
 
 	// Helper function to scroll up a given plane
@@ -923,34 +934,14 @@ impl Emulator {
 					1
 				};
 				let num_rows = if n == 0 {16} else {n};
-				let mut total_flipped_rows = vec![false; num_rows as usize];
 				
 				for i in 0..self.num_planes {
 					let bit = (self.selected_planes >> i) & 0b0001;
 					if bit == 1 {
-						let flipped_rows = self.draw_sprite(x_base, y_base, n, base_address, i as usize);
-						total_flipped_rows = total_flipped_rows.iter()
-							.zip(flipped_rows.iter())
-							.map(|(&x, &y)| x || y).collect();
+						self.draw_sprite(x_base, y_base, n, base_address, i as usize);
 						base_address += width*num_rows as u16;
 					}
 				}
-				let sum: u8 = total_flipped_rows.iter().map(|&x| x as u8).sum();
-				if self.high_res_mode {
-					self.v_register[0xF] = sum;
-				}
-						// let flipped_rows2 = self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane2);
-						// // In XO-Chip, register V[0xF] must be set to the number
-						// // of rows that have been flipped in EITHER Plane 1 or Plane 2
-						// // so we get the vector of each row flipped for each plane,
-						// // and we perform a simple OR operation
-						// let combined_vector: Vec<bool> = flipped_rows1.iter()
-						// 	.zip(flipped_rows2.iter())
-						// 	.map(|(&x, &y)| x || y).collect();
-						// let sum: u8 = combined_vector.iter().map(|&x| x as u8).sum();
-						// if self.high_res_mode {
-						// 	self.v_register[0xF] = sum;
-						// }
 			}
 		}
 	}
