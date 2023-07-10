@@ -8,10 +8,8 @@ use sdl2::video::Window;
 
 #[derive(Clone)]
 pub struct Palette {
-	pub color0: Color,
-	pub color1: Color,
-	pub color2: Color,
-	pub color3: Color,
+	// Magic number
+	pub colors: [Color; 16],
 }
 
 // Holds all information needed for drawing to the screen
@@ -29,7 +27,7 @@ impl VideoDriver {
 	pub fn new(video_subsystem: &VideoSubsystem, s_width: u32, s_height: u32, given_palettes: Vec<Palette>, given_scale: u32) -> Self {
 		let new_window_width = (s_width as u32) * given_scale;
 		let new_window_height = (s_height as u32) * given_scale;
-		let window = video_subsystem.window("CHIP-8 Emulator", new_window_width, new_window_height).position_centered().opengl().build().unwrap();
+		let window = video_subsystem.window("Crisp: A CHIP-8, SUPER-CHIP, and XO-CHIP Emulator", new_window_width, new_window_height).position_centered().opengl().build().unwrap();
 		let mut new_canvas = window.into_canvas().present_vsync().build().unwrap();
 		
 		new_canvas.clear();
@@ -46,34 +44,33 @@ impl VideoDriver {
 	}
 
 	// Draw using the 2 screen buffer and the selected palette 
-	pub fn draw_window(&mut self, buffers: (&[bool], &[bool]) ) {
-		self.canvas.set_draw_color(self.palettes[0].color0);
+	pub fn draw_window(&mut self, buffers: &Vec<Vec<bool>> ) {
+		self.canvas.set_draw_color(self.palettes[0].colors[0]);
 		self.canvas.clear();
 
-		let (screen_buffer1, screen_buffer2) = buffers;
-		
-		for (index, (pixel1, pixel2)) in (screen_buffer1.iter().zip(screen_buffer2.iter())).enumerate() {
+		for index in 0..buffers[0].len() {
 			let x = (index % self.screen_width) as u32;
 			let y = (index / self.screen_width) as u32;
 			let rect = Rect::new((x * self.scale) as i32, (y * self.scale) as i32, self.scale, self.scale);
-			if *pixel1 && *pixel2 {
-				self.canvas.set_draw_color(self.palettes[self.current_palette].color3);
-			}
-			else if *pixel1 {
-				self.canvas.set_draw_color(self.palettes[self.current_palette].color1);
-			}
-			else if *pixel2 {
-				self.canvas.set_draw_color(self.palettes[self.current_palette].color2);
-			}
-			else {
-				self.canvas.set_draw_color(self.palettes[self.current_palette].color0);
-			}
+			let pixel_value = self.get_pixel_value(buffers, index);
+			self.canvas.set_draw_color(self.palettes[self.current_palette].colors[pixel_value]);
 			self.canvas.fill_rect(rect).unwrap();
 		}
 
 		self.canvas.present();
 	}
 
+	pub fn get_pixel_value(&self, buffers: &Vec<Vec<bool>>, index: usize) -> usize {
+		let mut pixel_value = 0;
+		for i in 0..buffers.len() {
+			let bit = buffers[i][index];
+			if bit {
+				pixel_value += 1 << i;
+			}
+		}
+		return pixel_value as usize;
+	}
+	
 	// Rotate the selected palette one spot to the right
 	pub fn move_palette_right(&mut self) {
 		self.current_palette = (self.current_palette + 1) % self.palettes.len()
@@ -128,8 +125,9 @@ fn get_palette_from_config(config: &Config, name: &str) -> Palette {
 	let (r, g, b) = hex_to_rgb(&palette_colors[1]).unwrap_or((255, 255, 0));
 	let color1 = Color::RGB(r, g, b);
 
-	// If the palette has more than 2 colors then use that
-	// otherwise, just plain blue
+	// Try to get the next 14 colors, if you can't find such colors,
+	// then just use a default one
+	
 	let color2 = if palette_colors.len() > 2 {
 		let (r, g, b) = hex_to_rgb(&palette_colors[2]).unwrap();
 		Color::RGB(r, g, b)
@@ -137,20 +135,102 @@ fn get_palette_from_config(config: &Config, name: &str) -> Palette {
 		Color::RGB(0, 0, 255)
 	};
 
-	// If the palette has more than 2 colors then use that
-	// otherwise, just plain red
 	let color3 = if palette_colors.len() > 3 {
 		let (r, g, b) = hex_to_rgb(&palette_colors[3]).unwrap();
 		Color::RGB(r, g, b)
 	} else {
 		Color::RGB(255, 0, 0)
 	};
-	
+
+	let color4 = if palette_colors.len() > 4 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[4]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let color5 = if palette_colors.len() > 5 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[5]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let color6 = if palette_colors.len() > 6 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[6]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let color7 = if palette_colors.len() > 7 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[7]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let color8 = if palette_colors.len() > 8 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[8]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let color9 = if palette_colors.len() > 9 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[9]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let color10 = if palette_colors.len() > 10 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[10]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let color11 = if palette_colors.len() > 11 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[11]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let color12 = if palette_colors.len() > 12 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[12]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let color13 = if palette_colors.len() > 13 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[13]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let color14 = if palette_colors.len() > 14 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[14]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let color15 = if palette_colors.len() > 15 {
+		let (r, g, b) = hex_to_rgb(&palette_colors[15]).unwrap();
+		Color::RGB(r, g, b)
+	} else {
+		Color::RGB(255, 0, 0)
+	};
+
+	let colors = [color0, color1, color2, color3, color4, color5, color6, color7,
+	color8, color9, color10, color11, color12, color13, color14, color15];
+		
 	Palette {
-		color0,
-		color1,
-		color2,
-		color3,
+		colors
 	}
 }
 

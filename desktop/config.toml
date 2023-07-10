@@ -1,8 +1,10 @@
 [frontend]
-palette = "classic"
-palettes_available = ["classic", "inverted", "casio", "obradinn", "octo", "paperback", "ice_cream", "bitbee", "funkyjam"]
+palette = "classic_extended"
+palettes_available = ["classic_extended", "inverted", "casio", "obradinn", "octo", "paperback", "ice_cream", "bitbee", "funkyjam"]
 
 classic = ["#000000", "#FFFFFF"]
+classic_extended = ["#1a1c2c", "#f4f4f4", "#94b0c2", "#333c57", "#b13e53", "#a7f070", "#3b5dc9", "#ffcd75", "#5d275d", "#38b764", "#29366f", "#566c86",  "#ef7d57", "#73eff7", "#41a6f6", "#257179"]
+
 inverted = ["#FFFFFF", "#000000"]
 obradinn = ["#2e3037", "#ebe5ce"]
 casio = ["#83b07e", "#000000"]

@@ -150,10 +150,17 @@ fn main() {
 		let seconds: f64 = (end - start) as f64 / timer_subsystem.performance_frequency() as f64;
 
 		// The amount of time left to ensure 60 fps (if vsync is on)
-		let time_delay = (1_000_000_000u64 / 60) - (seconds * 1_000_000_000f64) as u64;
+		let nominator = 1_000_000_000u64 / 60;
+		let denominator = (seconds * 1_000_000_000f64) as u64;
+		let time_delay = nominator.checked_sub(denominator);
 		if !args.fpscap_off {
-			spin_sleep::sleep(Duration::new(0, time_delay as u32));
+			match time_delay {
+				Some(result) => spin_sleep::sleep(Duration::new(0, result as u32)),
+		
+				None => (),
+			}
 		}
+		
 
 		// let end: u64 = timer_subsystem.performance_counter();
 		// let seconds: f64 = (end - start) as f64 / timer_subsystem.performance_frequency() as f64;

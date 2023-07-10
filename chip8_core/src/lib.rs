@@ -71,14 +71,6 @@ pub struct EmuConfig {
 	pub quirk_clipcollision: bool, 
 }
 
-#[derive(Copy, Clone, PartialEq)]
-pub enum BitPlane {
-	NoPlane,
-	Plane1,
-	Plane2,
-	Both,
-}
-
 #[derive(Clone)]
 pub struct Emulator {
 	config: EmuConfig,
@@ -86,7 +78,7 @@ pub struct Emulator {
 	pc: u16,
 	ram_size: usize,
 	ram: Vec<u8>,
-	screen: Vec<bool>,
+	screen: Vec<Vec<bool>>,
 	// FYI: v stands for "variable"
 	v_register: [u8; NUM_REGISTERS],
 	// The I register only needs 12 bits, so it's a bit overkill
@@ -107,8 +99,8 @@ pub struct Emulator {
 
 	// Needed for the XOChip variant
 	next_opcode_double: bool,
-	screen2: Vec<bool>, // Second plane that allows us to display 2 more colors
-	plane: BitPlane,
+	selected_planes: u8,
+	num_planes: u8,
 	pub pattern_buffer: [u8; PATTERN_BUFFER_SIZE],
 	pub pitch: u8,
 }
@@ -132,13 +124,14 @@ impl Emulator {
 			Variant::Chip8 | Variant::SChip => RAM_SIZE,
 			Variant::XOChip => RAM_SIZE_XO,
 		};
+		
 		let mut new_emulator = Self {
 			config: given_config.clone(),
 			
 			pc: START_ADDRESS,
 			ram_size: platform_ram_size,
 			ram: vec![0; platform_ram_size],
-			screen: vec![false; width * height],
+			screen: vec![vec![false; width * height]; 4],
 			v_register: [0; NUM_REGISTERS],
 			i_register: 0,
 			stack_pointer: -1,
@@ -155,8 +148,8 @@ impl Emulator {
 			rpl: [0; 16],
 
 			next_opcode_double: false,
-			screen2: vec![false; width * height],
-			plane: BitPlane::Plane1,
+			selected_planes: 1,
+			num_planes: 4,
 			pattern_buffer: [0; PATTERN_BUFFER_SIZE],
 			pitch: DEFAULT_PITCH,
 		};
@@ -185,9 +178,15 @@ impl Emulator {
 
 	// Resets all fields (you'll probably need to reload the ROM as well)
 	pub fn reset(&mut self) {
+		let mut matrix: Vec<Vec<bool>> = vec![];
+		for _ in 0..4 {
+			let row: Vec<bool> = vec![false; self.screen_width*self.screen_height];
+			matrix.push(row);
+		}
+		
 		self.pc = START_ADDRESS;
 		self.ram = vec![0; self.ram_size];
-		self.screen = vec![false; self.screen_width * self.screen_height];
+		self.screen = matrix;
 		self.v_register = [0; NUM_REGISTERS];
 		self.i_register = 0;
 		self.stack_pointer = -1;
@@ -204,8 +203,7 @@ impl Emulator {
 		self.high_res_mode = false;
 
 		self.next_opcode_double = false;
-		self.screen = vec![false; self.screen_width * self.screen_height];
-		self.plane = BitPlane::Plane1;
+		self.selected_planes = 1;
 		self.pattern_buffer = [0; PATTERN_BUFFER_SIZE];
 		self.pitch = DEFAULT_PITCH;
 	}
@@ -219,8 +217,8 @@ impl Emulator {
 	}
 
 	// Return the 2 screen buffers
-	pub fn get_screen_buffers(&self) -> (&[bool], &[bool]){
-		(&self.screen, &self.screen2)
+	pub fn get_screen_buffers(&self) -> &Vec<Vec<bool>>{
+		&self.screen
 	}
 
 	pub fn register_keypress(&mut self, index: usize, pressed: bool) {
@@ -264,30 +262,6 @@ impl Emulator {
 		op
 	}
 
-	// Clears screen if screen = 1, screen2 if screen = 2
-	fn clear_screen(&mut self, plane: &BitPlane) {
-		match plane {
-			BitPlane::NoPlane => (),
-			BitPlane::Plane1 => {
-				for pixel in self.screen.iter_mut() {
-					*pixel = false;
-				}
-			},
-			BitPlane::Plane2 => {
-				for pixel in self.screen2.iter_mut() {
-					*pixel = false;
-				}
-			},
-			BitPlane::Both => {
-				for pixel in self.screen.iter_mut() {
-					*pixel = false;
-				}
-				for pixel in self.screen2.iter_mut() {
-					*pixel = false;
-				}
-			},
-		}
-	}
 
 	// Read to opcode and execute the relative command
 	fn execute(&mut self, op: u16) {
@@ -460,13 +434,16 @@ impl Emulator {
 		}
 	}
 
+	// Clears selected plane
+	fn clear_screen(&mut self, plane_index: usize) {
+		for pixel in self.screen[plane_index].iter_mut() {
+			*pixel = false;
+		}
+	}
+	
 	// Draws sprites on the screen by writing bits on the screen buffers
-	fn draw_sprite(&mut self, x_base: u16, y_base: u16, n: u8, base_address: u16, plane: BitPlane) -> Vec<bool>{
-		let screen = if plane == BitPlane::Plane1 {
-			&mut self.screen
-		} else {
-			&mut self.screen2
-		};
+	fn draw_sprite(&mut self, x_base: u16, y_base: u16, n: u8, base_address: u16, plane_index: usize) -> Vec<bool>{
+		let screen = &mut self.screen[plane_index];
 		let width = if n == 0 {
 			2
 		} else {
@@ -607,12 +584,9 @@ impl Emulator {
 	}
 
 	// Helper function to scroll up a given plane
-	fn scroll_up(&mut self, n: u8, plane: BitPlane) {
-		let screen = if plane == BitPlane::Plane1 {
-			&mut self.screen
-		} else {
-			&mut self.screen2
-		};
+	fn scroll_up(&mut self, n: u8, plane_index: usize) {
+		let screen = &mut self.screen[plane_index];
+
 		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
 			2*n as usize
 		} else {
@@ -630,12 +604,8 @@ impl Emulator {
 	}
 	
 	// Helper function to scroll down a given plane
-	fn scroll_down(&mut self, n: u8, plane: BitPlane) {
-		let screen = if plane == BitPlane::Plane1 {
-			&mut self.screen
-		} else {
-			&mut self.screen2
-		};
+	fn scroll_down(&mut self, n: u8, plane_index: usize) {
+		let screen = &mut self.screen[plane_index];
 		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
 			2*n as usize
 		} else {
@@ -652,12 +622,8 @@ impl Emulator {
 		}
 	}
 	// Helper function to scroll right a given plane
-	fn scroll_right(&mut self, plane: BitPlane) {
-		let screen = if plane == BitPlane::Plane1 {
-			&mut self.screen
-		} else {
-			&mut self.screen2
-		};
+	fn scroll_right(&mut self, plane_index: usize) {
+		let screen = &mut self.screen[plane_index];
 		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
 			8 as usize
 		} else {
@@ -675,12 +641,8 @@ impl Emulator {
 	}
 	
 	// Helper function to scroll left a given plane
-	fn scroll_left(&mut self, plane: BitPlane) {
-		let screen = if plane == BitPlane::Plane1 {
-			&mut self.screen
-		} else {
-			&mut self.screen2
-		};
+	fn scroll_left(&mut self, plane_index: usize) {
+		let screen = &mut self.screen[plane_index];
 		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
 			8 as usize
 		} else {
@@ -709,8 +671,12 @@ impl Emulator {
 
 	// 00E0: Clear screen
 	fn opcode_00e0(&mut self) {
-		let current_plane = self.plane;
-		self.clear_screen(&current_plane);
+		for i in 0..self.num_planes {
+			let bit = (self.selected_planes >> i) & 0b0001;
+			if bit == 1 {
+				self.clear_screen(i as usize);
+			}
+		}
 	}
 	
 	// 00EE: Return from subroutine
@@ -938,7 +904,8 @@ impl Emulator {
 					}
 				}
 				let base_address = self.i_register;
-				self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane1);
+				self.draw_sprite(x_base, y_base, n, base_address, 0);
+				
 			}
 			
 			Variant::XOChip => {
@@ -948,42 +915,46 @@ impl Emulator {
 						return;
 					}
 				}
+				
 				let mut base_address = self.i_register;
-				match self.plane {
-					BitPlane::NoPlane => (),
-					BitPlane::Plane1 => {
-						self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane1);
-					}
-					BitPlane::Plane2 => {
-						self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane2);
-					}
-					BitPlane::Both => {
-						let flipped_rows1 = self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane1);
-						let width = if n == 0 && self.high_res_mode == true {
-							2
-						} else {
-							1
-						};
-						let num_rows = if n == 0 {16} else {n};
-						// Move the address by the total number of bytes we used
-						base_address = self.i_register + (width*num_rows as u16);
-						let flipped_rows2 = self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane2);
-						// In XO-Chip, register V[0xF] must be set to the number
-						// of rows that have been flipped in EITHER Plane 1 or Plane 2
-						// so we get the vector of each row flipped for each plane,
-						// and we perform a simple OR operation
-						let combined_vector: Vec<bool> = flipped_rows1.iter()
-							.zip(flipped_rows2.iter())
+				let width = if n == 0 && self.high_res_mode == true {
+					2
+				} else {
+					1
+				};
+				let num_rows = if n == 0 {16} else {n};
+				let mut total_flipped_rows = vec![false; num_rows as usize];
+				
+				for i in 0..self.num_planes {
+					let bit = (self.selected_planes >> i) & 0b0001;
+					if bit == 1 {
+						let flipped_rows = self.draw_sprite(x_base, y_base, n, base_address, i as usize);
+						total_flipped_rows = total_flipped_rows.iter()
+							.zip(flipped_rows.iter())
 							.map(|(&x, &y)| x || y).collect();
-						let sum: u8 = combined_vector.iter().map(|&x| x as u8).sum();
-						if self.high_res_mode {
-							self.v_register[0xF] = sum;
-						}
+						base_address += width*num_rows as u16;
 					}
 				}
+				let sum: u8 = total_flipped_rows.iter().map(|&x| x as u8).sum();
+				if self.high_res_mode {
+					self.v_register[0xF] = sum;
+				}
+						// let flipped_rows2 = self.draw_sprite(x_base, y_base, n, base_address, BitPlane::Plane2);
+						// // In XO-Chip, register V[0xF] must be set to the number
+						// // of rows that have been flipped in EITHER Plane 1 or Plane 2
+						// // so we get the vector of each row flipped for each plane,
+						// // and we perform a simple OR operation
+						// let combined_vector: Vec<bool> = flipped_rows1.iter()
+						// 	.zip(flipped_rows2.iter())
+						// 	.map(|(&x, &y)| x || y).collect();
+						// let sum: u8 = combined_vector.iter().map(|&x| x as u8).sum();
+						// if self.high_res_mode {
+						// 	self.v_register[0xF] = sum;
+						// }
 			}
 		}
 	}
+
 
 
 	
@@ -1109,7 +1080,9 @@ impl Emulator {
 	fn opcode_00fe(&mut self) {
 		self.high_res_mode = false;
 		if self.config.variant == Variant::XOChip {
-			self.clear_screen(&BitPlane::Both);
+			for i in 0..self.num_planes {
+				self.clear_screen(i as usize);
+			}
 		}
 		
 	}
@@ -1117,9 +1090,10 @@ impl Emulator {
 	fn opcode_00ff(&mut self) {
 		self.high_res_mode = true;
 		if self.config.variant == Variant::XOChip {
-			self.clear_screen(&BitPlane::Both);	
+			for i in 0..self.num_planes {
+				self.clear_screen(i as usize);
+			}
 		}
-		
 	}
 	// FX75: Store V[0]-V[X] in RPL flags
 	fn opcode_fx75(&mut self, x: u8) {
@@ -1135,51 +1109,30 @@ impl Emulator {
 
 	// 00CN: Scroll display N pixels down (N/2 in low resolution mode)
 	fn opcode_00cn(&mut self, n: u8) {
-		match self.plane {
-			BitPlane::NoPlane => (),
-			BitPlane::Plane1 => {
-				self.scroll_down(n, BitPlane::Plane1);
-			}
-			BitPlane::Plane2 => {
-				self.scroll_down(n, BitPlane::Plane2);
-			}
-			BitPlane::Both => {
-				self.scroll_down(n, BitPlane::Plane1);
-				self.scroll_down(n, BitPlane::Plane2);
+		for i in 0..self.num_planes {
+			let bit = (self.selected_planes >> i) & 0b0001;
+			if bit == 1 {
+				self.scroll_down(n, i as usize);
 			}
 		}
 	}
 	// 00FB: Scroll display right by 4 pixels (2 in low resolution mode)
 	fn opcode_00fb(&mut self) {
-		match self.plane {
-			BitPlane::NoPlane => (),
-			BitPlane::Plane1 => {
-				self.scroll_right(BitPlane::Plane1);
-			}
-			BitPlane::Plane2 => {
-				self.scroll_right(BitPlane::Plane2);
-			}
-			BitPlane::Both => {
-				self.scroll_right(BitPlane::Plane1);
-				self.scroll_right(BitPlane::Plane2);
+		for i in 0..self.num_planes {
+			let bit = (self.selected_planes >> i) & 0b0001;
+			if bit == 1 {
+				self.scroll_right(i as usize);
 			}
 		}
 	}
 	// 00FC: Scroll display left by 4 pixels (2 in low resolution mode)
 	fn opcode_00fc(&mut self) {
-		match self.plane {
-			BitPlane::NoPlane => (),
-			BitPlane::Plane1 => {
-				self.scroll_left(BitPlane::Plane1);
+		for i in 0..self.num_planes {
+			let bit = (self.selected_planes >> i) & 0b0001;
+			if bit == 1 {
+				self.scroll_left(i as usize);
 			}
-			BitPlane::Plane2 => {
-				self.scroll_left(BitPlane::Plane2);
-			}
-			BitPlane::Both => {
-				self.scroll_left(BitPlane::Plane1);
-				self.scroll_left(BitPlane::Plane2);
-			}
-		}				
+		}			
 	}
 	// FX30: Set I to 10-byte font for digit V[x] 
 	fn opcode_fx30(&mut self, x: u8) {
@@ -1192,17 +1145,10 @@ impl Emulator {
 	// Opcodes for the XOChip
 	// 00DN: Scroll display up by N pixels (N/2 in low resolution mode)
 	fn opcode_00dn(&mut self, n: u8) {
-		match self.plane {
-			BitPlane::NoPlane => (),
-			BitPlane::Plane1 => {
-				self.scroll_up(n, BitPlane::Plane1);
-			}
-			BitPlane::Plane2 => {
-				self.scroll_up(n, BitPlane::Plane2);
-			}
-			BitPlane::Both => {
-				self.scroll_up(n, BitPlane::Plane1);
-				self.scroll_up(n, BitPlane::Plane2);
+		for i in 0..self.num_planes {
+			let bit = (self.selected_planes >> i) & 0b0001;
+			if bit == 1 {
+				self.scroll_up(n, i as usize);
 			}
 		}
 	}
@@ -1254,12 +1200,7 @@ impl Emulator {
 	}
 	// FN01: Select drawing plane(s)
 	fn opcode_fn01(&mut self, n: u8) {
-		match n {
-			0 => self.plane = BitPlane::NoPlane,
-			1 => self.plane = BitPlane::Plane1,
-			2 => self.plane = BitPlane::Plane2,
-			_ => self.plane = BitPlane::Both,
-		}
+		self.selected_planes = n;
 	}
 	// F002: Store 16 bytes in audio pattern buffer
 	fn opcode_f002(&mut self) {
