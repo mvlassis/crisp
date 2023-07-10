@@ -1,6 +1,12 @@
 # Crisp
 A CHIP-8, SUPER-CHIP, and XO-CHIP emulator written in Rust.
 
+## Gallery
+<img src="gallery/pong.png" width = "512"> <img src="gallery/superneatboy.png" width = "512">
+
+<img src="gallery/alien-inv8sion.gif" width = "512">
+
+
 ## Features
 - Full support for CHIP-8, SUPER-CHIP, and XO-CHIP.
 - Sound support for all variants
