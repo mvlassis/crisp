@@ -44,7 +44,7 @@ fn main() {
 
 	// Get settings for the emulator and create an object
 	let emu_config = args.get_emuconfig();
-	let mut ticks_per_frame = args.ticks_per_frame;
+	let mut ticks_per_frame = args.get_ticks_per_frame();
 	let mut chip8_emulator = Emulator::new(&emu_config);
 	
 	let mut rom = File::open(&args.file_name).expect("Unable to open file");

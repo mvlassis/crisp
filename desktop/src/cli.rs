@@ -37,15 +37,15 @@ pub struct Args {
 	// Display settings
 	// How many cycles are executed per frame
 	// Note: This is not actually related to emulation
-	#[arg(short, long, default_value_t = 15)]
+	#[arg(short, long, default_value_t = 20, help = "Override the ticks per frame. [Defaults: chip8 = 15, s-chip = 20, xo-chip = 500]")]
 	pub ticks_per_frame: u32,
 
 	// The multiplier by which we scale the display
-	#[arg(short, long, default_value_t = 10)]
+	#[arg(short, long, default_value_t = 10, help = "The multiplier by which we scale the display")]
 	pub scale: u8,
 
 	// Whether we want to turn fps capping off
-	#[arg(long)]
+	#[arg(long, help = "Turn off capping the framerate at 60 fps")]
 	pub fpscap_off: bool,
 
 	// Audio settings
@@ -54,6 +54,20 @@ pub struct Args {
 }
 
 impl Args {
+
+	pub fn get_ticks_per_frame(&self) -> u32 {
+		let mut ticks = match self.variant {
+			CLIVariant::Chip8 => 15,
+			CLIVariant::SChip => 20,
+			CLIVariant::XOChip => 500,
+		};
+
+		if self.ticks_per_frame != 15 {
+			ticks = self.ticks_per_frame;
+		}
+		ticks
+	}
+	
 	// Returns the variant given from the CLI
 	pub fn get_variant(&self) -> chip8_core::Variant {
 		match self.variant {

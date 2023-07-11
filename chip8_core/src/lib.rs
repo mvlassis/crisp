@@ -452,28 +452,29 @@ impl Emulator {
 	// Draws sprites on the screen by writing bits on the screen buffers
 	fn draw_sprite(&mut self, x_base: u16, y_base: u16, n: u8, base_address: u16, plane_index: usize) {
 		let screen = &mut self.screen[plane_index];
-		let width = if n == 0 {
+		let mut width = if n == 0 {
 			2
 		} else {
 			1
 		};
-		let mask = if n == 0 {
+		let mut mask = if n == 0 {
 			0b1000_0000_0000_0000
 		} else {
 			0b1000_0000
 		};
 		
-		let mut num_rows = if n == 0 {16} else {n};
+		let num_rows = if n == 0 {16} else {n};
 		let mut total_flipped_rows = 0;
 		// Only needed for that weird quirk in S-Chip where the V[0xF] register
 		// is set to the number of rows with collisions PLUS the number of rows
 		// clipped at the bottom order
 		let mut clipped_rows = 0;
 		
-		// Lowres mode on SChip only draws 8x16
+		// Lowres mode on SChip only draws 8x16 (8 width, 16 rows)
 		if n == 0 && self.config.variant == Variant::SChip &&
 			self.high_res_mode == false {
-				num_rows = 8;
+				width = 1;
+				mask = 0b1000_0000;
 			}
 		
 		for row in 0..num_rows {
