@@ -91,3 +91,4 @@ The `--quirk-` options toggle the default value of the selected variant. If the 
 - [Gulrak's opcode table](https://chip8.gulrak.net/?p=chip8,schip11,xochip) explains the weird quirks of all CHIP-8 variants
 
 ## License
+Crisp is licensed under the [MIT license](https://choosealicense.com/licenses/mit/).
