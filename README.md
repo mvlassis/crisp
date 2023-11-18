@@ -56,7 +56,7 @@ The original COSMAC VIP used the 16 hexadecimal digit keys as inputs. The keyboa
 
 `-s <SCALE>` Set the scale multiplier [default: 15]
 
-`-t <TICKS_PER_FRAME>` Set he number of ticks (operations) per frame [default: 10]
+`-t <TICKS_PER_FRAME>` Set he number of ticks (operations) per frame [defaults: chip8 = 15, s-chip = 20, xo-chip = 500]
 
 `-m` Start the program muted
 
@@ -65,21 +65,21 @@ The original COSMAC VIP used the 16 hexadecimal digit keys as inputs. The keyboa
 
 The `--quirk-` options toggle the default value of the selected variant. If the quirk is by default `True` for a specific variant, it is set to `False`, and vice versa. 
 
-`--quirk-legacyscroll`: Scroll operations on low-resulution mode `scroll by half the pixels`/`scroll by all the pixels`.
+`--quirk-legacyscroll`: Scroll operations on low-resulution mode `scroll by half the pixels / scroll by all the pixels`.
 
-`--quirk-vfreset`: The AND, OR, and XOR Opcodes (8xy1, 8xy2 and 8xy3) `reset/do not reset` the flags register to 0. 
+`--quirk-vfreset`: The AND, OR, and XOR Opcodes (8xy1, 8xy2 and 8xy3) `reset / do not reset` the flags register to 0. 
 
-`--quirk-memory`: The save and load opcodes (Fx55 and Fx65) `increment/do not increment` the index register.
+`--quirk-memory`: The save and load opcodes (Fx55 and Fx65) `increment / do not increment` the index register.
 
-`--quirk-displaywait` Drawing sprites to the display in low-resolution mode `waits/does not wait` for the vertical blank interrupt, limiting their speed to at most 1 draw opcode per frame.
+`--quirk-displaywait` Drawing sprites to the display in low-resolution mode `waits / does not wait` for the vertical blank interrupt, limiting their speed to at most 1 draw opcode per frame.
 
-`--quirk-clipping` Sprites drawn at the edges of the screen `get clipped/wrap around`.
+`--quirk-clipping` Sprites drawn at the edges of the screen `get clipped / wrap around`.
 
-`--quirk-shifting` The shift opcodes (8xy6 and 8xyE) `store the shifted version of V[y] in V[x]/only operate on V[x]`.
+`--quirk-shifting` The shift opcodes (8xy6 and 8xyE) `store the shifted version of V[y] in V[x] / only operate on V[x]`.
 
-`--quirk-jumping` The "jump to some address plus v0" instruction (Bnnn) `use V[x] (where x is the highest nibble of nnn) instead of V[0]/only uses V[0]`.
+`--quirk-jumping` The "jump to some address plus v0" instruction (Bnnn) `use V[x] (where x is the highest nibble of nnn) instead of V[0] / only uses V[0]`.
 
-`--quirk-clipcollision` The draw opcode (dxyn) in high-resolution mode `adds to the flag register the number of rows that get clipped at the bottom edge of the screen/does not do this`. A weird quirk in the original SUPER-CHIP.
+`--quirk-clipcollision` The draw opcode (dxyn) in high-resolution mode `adds to the flag register the number of rows that get clipped at the bottom edge of the screen / does not do this`. A weird quirk in the original SUPER-CHIP.
 
 
 ## Acknowledgements
