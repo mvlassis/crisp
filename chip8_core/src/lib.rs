@@ -58,7 +58,8 @@ pub enum Variant {
 #[derive(Copy, Clone)]
 pub struct EmuConfig {
 	pub variant: Variant,
-	
+
+	pub quirk_legacyscroll: bool,
 	pub quirk_vfreset: bool, // 8xy1, 8xy2, 8xy3 reset register flags to 0
 	pub quirk_memory: bool,
 	pub quirk_displaywait: bool,
@@ -94,7 +95,7 @@ pub struct Emulator {
 	screen_height: usize,
 	key_frame: bool,
 
-	// Needed for the SChip variant	
+	// Needed for the SChip variants	
 	high_res_mode: bool,
 	rpl: [u8; 16],
 
@@ -471,7 +472,7 @@ impl Emulator {
 		let mut clipped_rows = 0;
 		
 		// Lowres mode on SChip only draws 8x16 (8 width, 16 rows)
-		if n == 0 && self.config.variant == Variant::SChip &&
+		if n == 0 && self.config.variant == Variant::SChip  &&
 			self.high_res_mode == false {
 				width = 1;
 				mask = 0b1000_0000;
@@ -605,7 +606,7 @@ impl Emulator {
 	fn scroll_up(&mut self, n: u8, plane_index: usize) {
 		let screen = &mut self.screen[plane_index];
 
-		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
+		let scroll_value = if self.high_res_mode == false && !self.config.quirk_legacyscroll {
 			2*n as usize
 		} else {
 			n as usize
@@ -624,7 +625,7 @@ impl Emulator {
 	// Helper function to scroll down a given plane
 	fn scroll_down(&mut self, n: u8, plane_index: usize) {
 		let screen = &mut self.screen[plane_index];
-		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
+		let scroll_value = if self.high_res_mode == false && !self.config.quirk_legacyscroll {
 			2*n as usize
 		} else {
 			n as usize
@@ -642,7 +643,7 @@ impl Emulator {
 	// Helper function to scroll right a given plane
 	fn scroll_right(&mut self, plane_index: usize) {
 		let screen = &mut self.screen[plane_index];
-		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
+		let scroll_value = if self.high_res_mode == false && !self.config.quirk_legacyscroll {
 			8 as usize
 		} else {
 			4 as usize
@@ -661,7 +662,7 @@ impl Emulator {
 	// Helper function to scroll left a given plane
 	fn scroll_left(&mut self, plane_index: usize) {
 		let screen = &mut self.screen[plane_index];
-		let scroll_value = if self.high_res_mode == false && self.config.variant == Variant::XOChip {
+		let scroll_value = if self.high_res_mode == false && !self.config.quirk_legacyscroll {
 			8 as usize
 		} else {
 			4 as usize

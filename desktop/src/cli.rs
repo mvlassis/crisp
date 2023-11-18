@@ -4,7 +4,8 @@ use clap::ValueEnum;
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum CLIVariant {
 	Chip8,
-	SChip,
+	Schip,
+	SchipLegacy,
 	XOChip,
 }
 
@@ -16,9 +17,11 @@ pub struct Args {
 	pub file_name: String,
 
 	// Emulation Settings
-	#[arg(short, long, value_enum, default_value_t = CLIVariant::SChip)]
+	#[arg(short, long, value_enum, default_value_t = CLIVariant::Schip)]
 	pub variant: CLIVariant,
 
+	#[arg(long)]
+	pub quirk_legacyscroll: bool,
 	#[arg(long)]
 	pub quirk_vfreset: bool,
 	#[arg(long)]
@@ -58,7 +61,8 @@ impl Args {
 	pub fn get_ticks_per_frame(&self) -> u32 {
 		let mut ticks = match self.variant {
 			CLIVariant::Chip8 => 15,
-			CLIVariant::SChip => 20,
+			CLIVariant::Schip => 20,
+			CLIVariant::SchipLegacy => 20,
 			CLIVariant::XOChip => 500,
 		};
 
@@ -72,7 +76,8 @@ impl Args {
 	pub fn get_variant(&self) -> chip8_core::Variant {
 		match self.variant {
 			CLIVariant::Chip8 => chip8_core::Variant::Chip8,
-			CLIVariant::SChip => chip8_core::Variant::SChip,
+			CLIVariant::Schip => chip8_core::Variant::SChip,
+			CLIVariant::SchipLegacy => chip8_core::Variant::SChip,
 			CLIVariant::XOChip => chip8_core::Variant::XOChip,
 		}
 	}
@@ -83,6 +88,7 @@ impl Args {
 			CLIVariant::Chip8 => {
 				chip8_core::EmuConfig {
 					variant: chip8_core::Variant::Chip8,
+					quirk_legacyscroll: false,
 					quirk_vfreset: true,
 					quirk_memory: true,
 					quirk_displaywait: false,
@@ -92,9 +98,10 @@ impl Args {
 					quirk_clipcollision: false,
 				}
 			}
-			CLIVariant::SChip => {
+			CLIVariant::Schip => {
 				chip8_core::EmuConfig {
 					variant: chip8_core::Variant::SChip,
+					quirk_legacyscroll: false,
 					quirk_vfreset: false,
 					quirk_memory: false,
 					quirk_displaywait: false,
@@ -104,9 +111,23 @@ impl Args {
 					quirk_clipcollision: false,
 				}
 			}
+			CLIVariant::SchipLegacy => {
+				chip8_core::EmuConfig {
+					variant: chip8_core::Variant::SChip,
+					quirk_legacyscroll: true,
+					quirk_vfreset: false,
+					quirk_memory: false,
+					quirk_displaywait: true,
+					quirk_clipping: true,
+					quirk_shifting: true,
+					quirk_jumping: true,
+					quirk_clipcollision: false,
+				}
+			}
 			CLIVariant::XOChip => {
 				chip8_core::EmuConfig {
 					variant: chip8_core::Variant::XOChip,
+					quirk_legacyscroll: false,
 					quirk_vfreset: false,
 					quirk_memory: true,
 					quirk_displaywait: false,
