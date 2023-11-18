@@ -65,6 +65,8 @@ The original COSMAC VIP used the 16 hexadecimal digit keys as inputs. The keyboa
 
 The `--quirk-` options toggle the default value of the selected variant. If the quirk is by default `True` for a specific variant, it is set to `False`, and vice versa. 
 
+`--quirk-legacyscroll`: Scroll operations on low-resulution mode `scroll by half the pixels`/`scroll by all the pixels`.
+
 `--quirk-vfreset`: The AND, OR, and XOR Opcodes (8xy1, 8xy2 and 8xy3) `reset/do not reset` the flags register to 0. 
 
 `--quirk-memory`: The save and load opcodes (Fx55 and Fx65) `increment/do not increment` the index register.
@@ -77,7 +79,7 @@ The `--quirk-` options toggle the default value of the selected variant. If the 
 
 `--quirk-jumping` The "jump to some address plus v0" instruction (Bnnn) `use V[x] (where x is the highest nibble of nnn) instead of V[0]/only uses V[0]`.
 
-`--quirk-clipcollision` The draw opcode (dxyn) in high-resolution mode `add to the flag register the number of rows that get clipped at the bottom edge of the screen/does not do this`. A weird quirk in the original SUPER-CHIP.
+`--quirk-clipcollision` The draw opcode (dxyn) in high-resolution mode `adds to the flag register the number of rows that get clipped at the bottom edge of the screen/does not do this`. A weird quirk in the original SUPER-CHIP.
 
 
 ## Acknowledgements
